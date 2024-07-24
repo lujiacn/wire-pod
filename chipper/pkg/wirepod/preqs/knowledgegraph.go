@@ -115,6 +115,7 @@ func togetherRequest(transcribedText string) string {
 
 func openaiRequest(transcribedText string) string {
 	var robName string
+	var url string
 	if vars.APIConfig.Knowledge.RobotName != "" {
 		robName = vars.APIConfig.Knowledge.RobotName
 	} else {
@@ -128,9 +129,16 @@ func openaiRequest(transcribedText string) string {
 		sendString = defaultPrompt + sendString
 	}
 	logger.Println("Making request to OpenAI...")
-	url := "https://api.openai.com/v1/completions"
+	// get url from vars.APIConfig.Endpoint
+
+	if vars.APIConfig.Knowledge.Endpoint != "" {
+		url = vars.APIConfig.Knowledge.Endpoint + "/completions"
+	} else {
+		url = "https://api.openai.com/v1/completions"
+	}
+
 	formData := `{
-"model": "gpt-3.5-turbo-instruct",
+"model": "gpt-4o",
 "prompt": "` + sendString + `",
 "temperature": 0.9,
 "max_tokens": 256,

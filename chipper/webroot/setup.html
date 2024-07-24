@@ -5,7 +5,8 @@
   <title>Wire-Pod Setup</title>
   <link rel="stylesheet" type="text/css" href="css/style.css" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <script src="https://kit.fontawesome.com/7508f396ac.js" crossorigin="anonymous"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.6.0/css/all.min.css" integrity="sha512-Kc323vGBEqzTmouAECnVceyQqyqdsSiqLQISBL29aUW4U/M7pSPA/gEUZQqv1cwx4OnYxTxve5UMg5GT6L4JJg==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+  <!-- <script src="https://kit.fontawesome.com/7508f396ac.js" crossorigin="anonymous"></script> -->
 </head>
 
 <body>
@@ -108,6 +109,8 @@
             <span id="openAIInput" style="display: none">
               <label for="openaiKey">OpenAI Key:</label>
               <input type="text" name="openaiKey" id="openaiKey" /><br />
+              <label for="customAIEndpoint">API Endpoint <small class="desc">(i.e. http://localhost:11434/v1)</small>:</label>
+              <input type="text" name="customAIEndpoint" id="customAIEndpoint" /><br />
               <label for="openaiKey">GPT Prompt <small class="desc">(leave blank for default):</small></label><br />
               <small><label class="desc" for="openAIPrompt">(default: "You are a helpful, animated robot called
                   Vector. Keep the response concise yet

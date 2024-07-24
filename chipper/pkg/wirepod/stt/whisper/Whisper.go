@@ -13,11 +13,14 @@ import (
 	"github.com/go-audio/audio"
 	"github.com/go-audio/wav"
 	"github.com/kercre123/wire-pod/chipper/pkg/logger"
+	"github.com/kercre123/wire-pod/chipper/pkg/vars"
 	sr "github.com/kercre123/wire-pod/chipper/pkg/wirepod/speechrequest"
 	"github.com/orcaman/writerseeker"
 )
 
 var Name string = "whisper"
+var openaiKey string = ""
+var openaiBase string = ""
 
 type openAiResp struct {
 	Text string `json:"text"`
@@ -27,7 +30,13 @@ func Init() error {
 	if os.Getenv("OPENAI_KEY") == "" {
 		logger.Println("This is an early implementation of the Whisper API which has not been implemented into the web interface. You must set the OPENAI_KEY env var.")
 		//os.Exit(1)
+		openaiKey = vars.APIConfig.Knowledge.Key
+		openaiBase = vars.APIConfig.Knowledge.Endpoint
+	} else {
+		openaiKey = os.Getenv("OPENAI_KEY")
+		openaiBase = os.Getenv("OPENAI_BASE")
 	}
+
 	return nil
 }
 
@@ -77,7 +86,12 @@ func newAudioIntBuffer(r io.Reader) (*audio.IntBuffer, error) {
 }
 
 func makeOpenAIReq(in []byte) string {
-	url := "https://api.openai.com/v1/audio/transcriptions"
+	url := openaiBase + "/audio/transcriptions"
+	// if v := os.Getenv("OPENAI_BASE"); v != "" {
+	// 	url = v + "/audio/transcriptions"
+	// } else {
+	// 	url = "https://api.openai.com/v1/audio/transcriptions"
+	// }
 
 	buf := new(bytes.Buffer)
 	w := multipart.NewWriter(buf)
@@ -88,7 +102,7 @@ func makeOpenAIReq(in []byte) string {
 
 	httpReq, _ := http.NewRequest("POST", url, buf)
 	httpReq.Header.Set("Content-Type", w.FormDataContentType())
-	httpReq.Header.Set("Authorization", "Bearer "+os.Getenv("OPENAI_KEY"))
+	httpReq.Header.Set("Authorization", "Bearer "+openaiKey)
 
 	client := &http.Client{}
 	resp, err := client.Do(httpReq)
