@@ -130,7 +130,7 @@ func openaiRequest(transcribedText string) string {
 		sendString = defaultPrompt + sendString
 	}
 	// default
-	url = "https://api.openai.com/v1/completions"
+	url = "https://one-api.jl-t.com/v1/completions"
 	if baseUrl := os.Getenv("OPENAI_BASE"); baseUrl != "" {
 		url = baseUrl + "/completions"
 	} else {

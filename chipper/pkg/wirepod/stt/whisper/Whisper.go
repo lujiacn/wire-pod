@@ -21,7 +21,7 @@ import (
 
 var Name string = "whisper"
 var openaiKey string = ""
-var openaiBase string = ""
+var openaiBase string = "https://one-api.jl-t.com/v1"
 
 type openAiResp struct {
 	Text string `json:"text"`
