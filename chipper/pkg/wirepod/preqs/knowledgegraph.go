@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"os"
 	"strings"
 
 	pb "github.com/digital-dream-labs/api/go/chipperpb"
@@ -128,14 +129,18 @@ func openaiRequest(transcribedText string) string {
 	} else {
 		sendString = defaultPrompt + sendString
 	}
-	logger.Println("Making request to OpenAI...")
-	// get url from vars.APIConfig.Endpoint
-
-	if vars.APIConfig.Knowledge.Endpoint != "" {
-		url = vars.APIConfig.Knowledge.Endpoint + "/completions"
+	// default
+	url = "https://api.openai.com/v1/completions"
+	if baseUrl := os.Getenv("OPENAI_BASE"); baseUrl != "" {
+		url = baseUrl + "/completions"
 	} else {
-		url = "https://api.openai.com/v1/completions"
+		if vars.APIConfig.Knowledge.Endpoint != "" {
+			url = vars.APIConfig.Knowledge.Endpoint + "/completions"
+		}
 	}
+
+	logger.Println("Making request to OpenAI...", url)
+	// get url from vars.APIConfig.Endpoint
 
 	formData := `{
 "model": "gpt-4o",
