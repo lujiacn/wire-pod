@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"encoding/json"
+	"errors"
 	"io"
 	"mime/multipart"
 	"net/http"
@@ -27,16 +28,28 @@ type openAiResp struct {
 }
 
 func Init() error {
-	if os.Getenv("OPENAI_KEY") == "" {
-		logger.Println("This is an early implementation of the Whisper API which has not been implemented into the web interface. You must set the OPENAI_KEY env var.")
-		//os.Exit(1)
+	// Check environment variables first
+	openaiKey = os.Getenv("OPENAI_KEY")
+	openaiBase = os.Getenv("OPENAI_BASE")
+
+	// If environment variables are not set, use values from vars
+	if openaiKey == "" {
 		openaiKey = vars.APIConfig.Knowledge.Key
-		openaiBase = vars.APIConfig.Knowledge.Endpoint
-	} else {
-		openaiKey = os.Getenv("OPENAI_KEY")
-		openaiBase = os.Getenv("OPENAI_BASE")
+		if openaiKey == "" {
+			logger.Println("OPENAI_KEY is not set in environment variables or in vars.APIConfig.Knowledge.Key")
+			return errors.New("OPENAI_KEY is not set")
+		}
 	}
 
+	if openaiBase == "" {
+		openaiBase = vars.APIConfig.Knowledge.Endpoint
+		if openaiBase == "" {
+			logger.Println("OPENAI_BASE is not set in environment variables or in vars.APIConfig.Knowledge.Endpoint")
+			return errors.New("OPENAI_BASE is not set")
+		}
+	}
+
+	logger.Println("This is an early implementation of the Whisper API which has not been implemented into the web interface.")
 	return nil
 }
 
