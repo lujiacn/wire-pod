@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"os"
 	"regexp"
 	"strings"
 	"time"
@@ -84,8 +85,8 @@ func removeSpecialCharacters(str string) string {
 	result = removeEmojis(re.ReplaceAllString(result, ""))
 
 	// Replace special characters with ASCII
-    // * COPY/PASTE TO ADD MORE CHARACTERS:
-    //   result = strings.ReplaceAll(result, "", "")
+	// * COPY/PASTE TO ADD MORE CHARACTERS:
+	//   result = strings.ReplaceAll(result, "", "")
 	result = strings.ReplaceAll(result, "‘", "'")
 	result = strings.ReplaceAll(result, "’", "'")
 	result = strings.ReplaceAll(result, "“", "\"")
@@ -105,10 +106,9 @@ func removeSpecialCharacters(str string) string {
 	result = strings.ReplaceAll(result, "®", "(r)")
 	result = strings.ReplaceAll(result, "™", "(tm)")
 	result = strings.ReplaceAll(result, "@", "(a)")
-	result = strings.ReplaceAll(result, " AI ", " A. I. ")	
+	result = strings.ReplaceAll(result, " AI ", " A. I. ")
 	return result
 }
-
 
 func removeEmojis(input string) string {
 	// a mess, but it works!
@@ -211,7 +211,16 @@ func StreamingKGSim(req interface{}, esn string, transcribedText string) (string
 		conf.BaseURL = vars.APIConfig.Knowledge.Endpoint
 		c = openai.NewClientWithConfig(conf)
 	} else if vars.APIConfig.Knowledge.Provider == "openai" {
-		c = openai.NewClient(vars.APIConfig.Knowledge.Key)
+		//vars.APIConfig.Knowledge.Key
+		config := openai.DefaultConfig(vars.APIConfig.Knowledge.Key)
+		if v := os.Getenv("OPENAI_BASE"); v != "" {
+			config.BaseURL = v
+		} else {
+			if vars.APIConfig.Knowledge.Endpoint != "" {
+				config.BaseURL = vars.APIConfig.Knowledge.Endpoint
+			}
+		}
+		c = openai.NewClientWithConfig(config)
 	}
 	ctx := context.Background()
 	speakReady := make(chan string)
@@ -578,8 +587,8 @@ func KGSim(esn string, textToSay string) error {
 				_, err := robot.Conn.SayText(
 					ctx,
 					&vectorpb.SayTextRequest{
-						Text:           str + ".",
-						UseVectorVoice: true,
+						Text: str + ".",
+						// UseVectorVoice: true,
 						DurationScalar: 1.0,
 					},
 				)
