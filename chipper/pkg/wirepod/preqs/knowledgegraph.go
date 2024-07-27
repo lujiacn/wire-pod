@@ -2,6 +2,7 @@ package processreqs
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -13,6 +14,7 @@ import (
 	"github.com/kercre123/wire-pod/chipper/pkg/vtt"
 	sr "github.com/kercre123/wire-pod/chipper/pkg/wirepod/speechrequest"
 	"github.com/pkg/errors"
+	"github.com/sashabaranov/go-openai"
 	"github.com/soundhound/houndify-sdk-go"
 )
 
@@ -120,60 +122,53 @@ func openaiRequest(transcribedText string) string {
 	} else {
 		robName = "Vector"
 	}
+
 	defaultPrompt := "You are a helpful robot called " + robName + ". You will be given a question asked by a user and you must provide the best answer you can. It may not be punctuated or spelled correctly as the STT model is small. The answer will be put through TTS, so it should be a speakable string. Keep the answer concise yet informative."
-	sendString := " Here is the question: " + "\\" + "\"" + transcribedText + "\\" + "\"" + " , Answer: "
+
+	prompt := defaultPrompt
 	if strings.TrimSpace(vars.APIConfig.Knowledge.OpenAIPrompt) != "" {
-		sendString = strings.TrimSpace(vars.APIConfig.Knowledge.OpenAIPrompt) + sendString
-	} else {
-		sendString = defaultPrompt + sendString
+		prompt = strings.TrimSpace(vars.APIConfig.Knowledge.OpenAIPrompt)
 	}
+
+	prompt += " Here is the question: \"" + transcribedText + "\", Answer:"
+
 	logger.Println("Making request to OpenAI...")
-	url := "https://api.openai.com/v1/completions"
-	formData := `{
-"model": "gpt-3.5-turbo-instruct",
-"prompt": "` + sendString + `",
-"temperature": 0.9,
-"max_tokens": 256,
-"top_p": 1,
-"frequency_penalty": 0.2,
-"presence_penalty": 0
-}`
-	req, _ := http.NewRequest("POST", url, bytes.NewBuffer([]byte(formData)))
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+strings.TrimSpace(vars.APIConfig.Knowledge.Key))
-	client := &http.Client{}
-	resp, err := client.Do(req)
+
+	// Create configuration
+	config := openai.DefaultConfig(strings.TrimSpace(vars.APIConfig.Knowledge.Key))
+
+	// If OpenAIBase is not blank, use it as the base URL
+	if baseURL := strings.TrimSpace(vars.APIConfig.Knowledge.OpenAIBase); baseURL != "" {
+		config.BaseURL = baseURL
+	}
+
+	// Create client with the configuration
+
+	client := openai.NewClientWithConfig(config)
+	resp, err := client.CreateCompletion(
+		context.Background(),
+		openai.CompletionRequest{
+			Model:            "gpt-4o",
+			Prompt:           prompt,
+			MaxTokens:        256,
+			Temperature:      0.9,
+			TopP:             1,
+			FrequencyPenalty: 0.2,
+			PresencePenalty:  0,
+		},
+	)
+
 	if err != nil {
 		logger.Println(err)
 		return "There was an error making the request to OpenAI."
 	}
-	defer resp.Body.Close()
-	body, _ := io.ReadAll(resp.Body)
-	type openAIStruct struct {
-		ID      string `json:"id"`
-		Object  string `json:"object"`
-		Created int    `json:"created"`
-		Model   string `json:"model"`
-		Choices []struct {
-			Text         string      `json:"text"`
-			Index        int         `json:"index"`
-			Logprobs     interface{} `json:"logprobs"`
-			FinishReason string      `json:"finish_reason"`
-		} `json:"choices"`
-		Usage struct {
-			PromptTokens     int `json:"prompt_tokens"`
-			CompletionTokens int `json:"completion_tokens"`
-			TotalTokens      int `json:"total_tokens"`
-		} `json:"usage"`
-	}
-	var openAIResponse openAIStruct
-	err = json.Unmarshal(body, &openAIResponse)
-	if err != nil || len(openAIResponse.Choices) == 0 {
+
+	if len(resp.Choices) == 0 {
 		logger.Println("OpenAI returned no response.")
-		logger.Println(string(body))
 		return "OpenAI returned no response."
 	}
-	apiResponse := strings.TrimSpace(openAIResponse.Choices[0].Text)
+
+	apiResponse := strings.TrimSpace(resp.Choices[0].Text)
 	logger.Println("OpenAI response: " + apiResponse)
 	return apiResponse
 }

@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"os"
 	"strings"
 	"time"
 
@@ -268,15 +267,17 @@ func DoPlaySound(sound string, robot *vector.Vector) error {
 }
 
 func DoSayText(input string, robot *vector.Vector) error {
-
 	// just before vector speaks
-	removeSpecialCharacters(input) 	
+	removeSpecialCharacters(input)
 
-	// TODO
-	if (vars.APIConfig.STT.Language != "en-US" && vars.APIConfig.Knowledge.Provider == "openai") || os.Getenv("USE_OPENAI_VOICE") == "true" {
+	// TODO, check
+	// if (vars.APIConfig.STT.Language != "en-US" && vars.APIConfig.Knowledge.Provider == "openai") || os.Getenv("USE_OPENAI_VOICE") == "true" {
+
+	if vars.APIConfig.Knowledge.Provider == "openai" {
 		err := DoSayText_OpenAI(robot, input)
 		return err
 	}
+
 	robot.Conn.SayText(
 		context.Background(),
 		&vectorpb.SayTextRequest{
@@ -285,6 +286,7 @@ func DoSayText(input string, robot *vector.Vector) error {
 			DurationScalar: 0.95,
 		},
 	)
+
 	return nil
 }
 
@@ -309,24 +311,38 @@ func getOpenAIVoice(voice string) openai.SpeechVoice {
 	return voiceMap[voice]
 }
 
-// TODO
+// TODO: done
 func DoSayText_OpenAI(robot *vector.Vector, input string) error {
 	if strings.TrimSpace(input) == "" {
 		return nil
 	}
-	openaiVoice := getOpenAIVoice(vars.APIConfig.Knowledge.OpenAIPrompt)
-	// if vars.APIConfig.Knowledge.OpenAIVoice == "" {
-	// 	openaiVoice = openai.VoiceFable
-	// } else {
-	// 	openaiVoice = getOpenAIVoice(vars.APIConfig.Knowledge.OpenAIPrompt)
-	// }
-	oc := openai.NewClient(vars.APIConfig.Knowledge.Key)
-	resp, err := oc.CreateSpeech(context.Background(), openai.CreateSpeechRequest{
+	// openaiVoice := getOpenAIVoice(vars.APIConfig.Knowledge.OpenAIPrompt)
+
+	openaiVoice := openai.VoiceFable
+
+	if vars.APIConfig.Knowledge.OpenAIVoice != "" {
+		openaiVoice = getOpenAIVoice(vars.APIConfig.Knowledge.OpenAIPrompt)
+	}
+
+	// Create configuration
+	config := openai.DefaultConfig(strings.TrimSpace(vars.APIConfig.Knowledge.Key))
+
+	// If OpenAIBase is not blank, use it as the base URL
+	if baseURL := strings.TrimSpace(vars.APIConfig.Knowledge.OpenAIBase); baseURL != "" {
+		config.BaseURL = baseURL
+	}
+
+	// Create client with the configuration
+
+	client := openai.NewClientWithConfig(config)
+
+	resp, err := client.CreateSpeech(context.Background(), openai.CreateSpeechRequest{
 		Model:          openai.TTSModel1,
 		Input:          input,
 		Voice:          openaiVoice,
 		ResponseFormat: openai.SpeechResponseFormatPcm,
 	})
+
 	if err != nil {
 		logger.Println(err)
 		return err

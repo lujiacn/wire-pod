@@ -108,6 +108,8 @@
             <span id="openAIInput" style="display: none">
               <label for="openaiKey">OpenAI Key:</label>
               <input type="text" name="openaiKey" id="openaiKey" /><br />
+              <label for="openaiKey">OpenAI Base:</label>
+              <input type="text" name="openaiBase" id="openaiBase" /><br />
               <label for="openaiKey">GPT Prompt <small class="desc">(leave blank for default):</small></label><br />
               <small><label class="desc" for="openAIPrompt">(default: "You are a helpful, animated robot called
                   Vector. Keep the response concise yet
@@ -157,10 +159,13 @@
                 </label>
               </span>
               <span id="saveChatInput" style="display: none">
-                <input type="checkbox" id="saveChatYes" name="saveChatselect" />
-                <label class="checkbox-label" for="saveChatYes">
-                  Save chats to be used in the context of future responses.
-                </label>
+                  <input type="checkbox" id="saveChatYes" name="saveChatselect" />
+                  <label class="checkbox-label" for="saveChatYes">
+                      Save chats to be used in the context of future responses.
+                  </label>
+                  <br />
+                  <label for="saveChatNum">Number of messages to save for context:</label>
+                  <input type="number" name="saveChatNum" id="saveChatNum" min="0" max="20" value="0" />
               </span>
             </div>
 

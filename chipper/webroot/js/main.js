@@ -288,6 +288,7 @@ function sendKGAPIKey() {
   };
   if (provider === "openai") {
     data.key = getE("openaiKey").value;
+    data.base = getE("openaiBase").value;
     data.openai_prompt = getE("openAIPrompt").value;
     data.intentgraph = getE("intentyes").checked
     data.save_chat = getE("saveChatYes").checked
@@ -313,6 +314,10 @@ function sendKGAPIKey() {
     data.id = getE("houndID").value;
   } else {
     data.enable = false;
+  }
+
+  if (data.save_chat) {
+    data.save_chat_num = parseInt(getE("saveChatNum").value) || 0;
   }
 
   fetch("/api/set_kg_api", {
@@ -346,6 +351,7 @@ function updateKGAPI() {
       getE("kgProvider").value = data.provider;
       if (data.provider === "openai") {
         getE("openaiKey").value = data.key;
+        getE("openaiBase").value = data.base;
         getE("openAIPrompt").value = data.openai_prompt;
         getE("openaiVoice").value = data.openai_voice;
         getE("commandYes").checked = data.commands_enable
@@ -369,6 +375,9 @@ function updateKGAPI() {
       } else if (data.provider === "houndify") {
         getE("houndKey").value = data.key;
         getE("houndID").value = data.id;
+      }
+      if (data.save_chat) {
+        getE("saveChatNum").value = data.save_chat_num || 0;
       }
       checkKG();
     });

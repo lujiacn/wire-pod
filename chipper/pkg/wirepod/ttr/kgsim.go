@@ -46,12 +46,18 @@ func PlaceChat(chat vars.RememberedChat) {
 
 // remember last 16 lines of chat
 func Remember(user, ai openai.ChatCompletionMessage, esn string) {
+	lineNum := 16
+	if vars.APIConfig.Knowledge.SaveChatNum != 0 {
+		lineNum = vars.APIConfig.Knowledge.SaveChatNum
+	}
+
 	chatAppend := []openai.ChatCompletionMessage{
 		user,
 		ai,
 	}
+
 	currentChat := GetChat(esn)
-	if len(currentChat.Chats) == 16 {
+	if len(currentChat.Chats) == lineNum {
 		var newChat vars.RememberedChat
 		newChat.ESN = currentChat.ESN
 		for i, chat := range currentChat.Chats {
@@ -84,8 +90,8 @@ func removeSpecialCharacters(str string) string {
 	result = removeEmojis(re.ReplaceAllString(result, ""))
 
 	// Replace special characters with ASCII
-    // * COPY/PASTE TO ADD MORE CHARACTERS:
-    //   result = strings.ReplaceAll(result, "", "")
+	// * COPY/PASTE TO ADD MORE CHARACTERS:
+	//   result = strings.ReplaceAll(result, "", "")
 	result = strings.ReplaceAll(result, "‘", "'")
 	result = strings.ReplaceAll(result, "’", "'")
 	result = strings.ReplaceAll(result, "“", "\"")
@@ -105,10 +111,9 @@ func removeSpecialCharacters(str string) string {
 	result = strings.ReplaceAll(result, "®", "(r)")
 	result = strings.ReplaceAll(result, "™", "(tm)")
 	result = strings.ReplaceAll(result, "@", "(a)")
-	result = strings.ReplaceAll(result, " AI ", " A. I. ")	
+	result = strings.ReplaceAll(result, " AI ", " A. I. ")
 	return result
 }
-
 
 func removeEmojis(input string) string {
 	// a mess, but it works!
