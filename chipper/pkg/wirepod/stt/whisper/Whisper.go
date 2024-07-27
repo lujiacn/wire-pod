@@ -13,6 +13,7 @@ import (
 	"github.com/go-audio/audio"
 	"github.com/go-audio/wav"
 	"github.com/kercre123/wire-pod/chipper/pkg/logger"
+	"github.com/kercre123/wire-pod/chipper/pkg/vars"
 	sr "github.com/kercre123/wire-pod/chipper/pkg/wirepod/speechrequest"
 	"github.com/orcaman/writerseeker"
 )
@@ -77,7 +78,13 @@ func newAudioIntBuffer(r io.Reader) (*audio.IntBuffer, error) {
 }
 
 func makeOpenAIReq(in []byte) string {
+	// check vars openai config and use the config
+
 	url := "https://api.openai.com/v1/audio/transcriptions"
+
+	if baseURL := strings.TrimSpace(vars.APIConfig.Knowledge.OpenAIBase); baseURL != "" {
+		url = baseURL + "/audio/transcriptons"
+	}
 
 	buf := new(bytes.Buffer)
 	w := multipart.NewWriter(buf)
@@ -116,9 +123,7 @@ func STT(req sr.SpeechRequest) (string, error) {
 		if err != nil {
 			return "", err
 		}
-		if err != nil {
-			return "", err
-		}
+
 		// has to be split into 320 []byte chunks for VAD
 		speechIsDone, _ = req.DetectEndOfSpeech()
 		if speechIsDone {
