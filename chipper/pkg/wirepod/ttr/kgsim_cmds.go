@@ -321,8 +321,10 @@ func DoSayText_OpenAI(robot *vector.Vector, input string) error {
 	openaiVoice := openai.VoiceFable
 
 	if vars.APIConfig.Knowledge.OpenAIVoice != "" {
-		openaiVoice = getOpenAIVoice(vars.APIConfig.Knowledge.OpenAIPrompt)
+		openaiVoice = getOpenAIVoice(vars.APIConfig.Knowledge.OpenAIVoice)
 	}
+
+	logger.Println("openai void", openaiVoice)
 
 	// Create configuration
 	config := openai.DefaultConfig(strings.TrimSpace(vars.APIConfig.Knowledge.Key))

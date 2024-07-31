@@ -259,6 +259,8 @@ func ReqToSpeechRequest(req interface{}) SpeechRequest {
 		request.LastAudioChunk = request.FilteredMicData[request.PrevLen:]
 		request.PrevLen = len(request.DecodedMicData)
 		request.IsOpus = true
+
+		logger.Println("Is Opus")
 	}
 	return request
 }

@@ -66,6 +66,9 @@ require (
 	github.com/spf13/pflag v1.0.5 // indirect
 	github.com/spf13/viper v1.7.1 // indirect
 	github.com/subosito/gotenv v1.2.0 // indirect
+	github.com/youpy/go-riff v0.1.0 // indirect
+	github.com/youpy/go-wav v0.3.2 // indirect
+	github.com/zaf/g711 v0.0.0-20190814101024-76a4a538f52b // indirect
 	golang.org/x/image v0.10.0 // indirect
 	golang.org/x/net v0.16.0 // indirect
 	golang.org/x/sys v0.15.0 // indirect

@@ -11,6 +11,7 @@ import (
 )
 
 // This is here for compatibility with 1.6 and older software
+// TODO, jia, process intent after get response from llm with perticular format.
 func (s *Server) ProcessIntent(req *vtt.IntentRequest) (*vtt.IntentResponse, error) {
 	var successMatched bool
 	speechReq := sr.ReqToSpeechRequest(req)

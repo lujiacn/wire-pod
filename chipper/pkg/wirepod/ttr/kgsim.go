@@ -216,7 +216,11 @@ func StreamingKGSim(req interface{}, esn string, transcribedText string) (string
 		conf.BaseURL = vars.APIConfig.Knowledge.Endpoint
 		c = openai.NewClientWithConfig(conf)
 	} else if vars.APIConfig.Knowledge.Provider == "openai" {
-		c = openai.NewClient(vars.APIConfig.Knowledge.Key)
+		config := openai.DefaultConfig(vars.APIConfig.Knowledge.Key)
+		if vars.APIConfig.Knowledge.OpenAIBase != "" {
+			config.BaseURL = vars.APIConfig.Knowledge.OpenAIBase
+		}
+		c = openai.NewClientWithConfig(config)
 	}
 	ctx := context.Background()
 	speakReady := make(chan string)

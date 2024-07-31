@@ -163,6 +163,8 @@ func Init() {
 		} else {
 			confDir, _ = os.UserConfigDir()
 		}
+
+		logger.Println("Config dir", confDir)
 		podDir := join(confDir, PodName)
 		appDir, _ := os.Executable()
 		os.Mkdir(podDir, 0777)
@@ -228,6 +230,7 @@ func Init() {
 	}
 	logger.Println("SDK info path: " + SDKIniPath)
 
+	logger.Println("APIPath: ", ApiConfigPath)
 	// load api config (config.go)
 	ReadConfig()
 
