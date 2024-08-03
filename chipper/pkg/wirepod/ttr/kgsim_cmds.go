@@ -331,13 +331,23 @@ func DoSayText_OpenAI(robot *vector.Vector, input string) error {
 	if strings.TrimSpace(input) == "" {
 		return nil
 	}
-	openaiVoice := getOpenAIVoice(vars.APIConfig.Knowledge.OpenAIPrompt)
+
+	openaiVoice := getOpenAIVoice(vars.APIConfig.Knowledge.OpenAIVoice)
 	// if vars.APIConfig.Knowledge.OpenAIVoice == "" {
 	// 	openaiVoice = openai.VoiceFable
 	// } else {
 	// 	openaiVoice = getOpenAIVoice(vars.APIConfig.Knowledge.OpenAIPrompt)
 	// }
-	oc := openai.NewClient(vars.APIConfig.Knowledge.Key)
+
+	conf := openai.DefaultConfig(vars.APIConfig.Knowledge.Key)
+	// use endpoint if added for openai
+	if v := vars.APIConfig.Knowledge.Endpoint; v != "" {
+		conf.BaseURL = v
+	}
+
+	// oc := openai.NewClient(vars.APIConfig.Knowledge.Key)
+	oc := openai.NewClientWithConfig(conf)
+
 	resp, err := oc.CreateSpeech(context.Background(), openai.CreateSpeechRequest{
 		Model:          openai.TTSModel1,
 		Input:          input,

@@ -7,12 +7,12 @@ import (
 	"io"
 	"mime/multipart"
 	"net/http"
-	"os"
 	"strings"
 
 	"github.com/go-audio/audio"
 	"github.com/go-audio/wav"
 	"github.com/kercre123/wire-pod/chipper/pkg/logger"
+	"github.com/kercre123/wire-pod/chipper/pkg/vars"
 	sr "github.com/kercre123/wire-pod/chipper/pkg/wirepod/speechrequest"
 	"github.com/orcaman/writerseeker"
 )
@@ -24,10 +24,8 @@ type openAiResp struct {
 }
 
 func Init() error {
-	if os.Getenv("OPENAI_KEY") == "" {
-		logger.Println("This is an early implementation of the Whisper API which has not been implemented into the web interface. You must set the OPENAI_KEY env var.")
-		//os.Exit(1)
-	}
+	// set key in Server instead of env
+	logger.Println("This is an early implementation of the Whisper API which has not been implemented into the web interface. You must set the OPENAI_KEY in Server Config.")
 	return nil
 }
 
@@ -78,6 +76,12 @@ func newAudioIntBuffer(r io.Reader) (*audio.IntBuffer, error) {
 
 func makeOpenAIReq(in []byte) string {
 	url := "https://api.openai.com/v1/audio/transcriptions"
+	if baseURL := strings.TrimSpace(vars.APIConfig.Knowledge.Endpoint); baseURL != "" {
+		url = baseURL + "/audio/transcriptions"
+	}
+
+	key := strings.TrimSpace(vars.APIConfig.Knowledge.Key)
+	logger.Println("Connect to openai whisper with base", url)
 
 	buf := new(bytes.Buffer)
 	w := multipart.NewWriter(buf)
@@ -88,7 +92,7 @@ func makeOpenAIReq(in []byte) string {
 
 	httpReq, _ := http.NewRequest("POST", url, buf)
 	httpReq.Header.Set("Content-Type", w.FormDataContentType())
-	httpReq.Header.Set("Authorization", "Bearer "+os.Getenv("OPENAI_KEY"))
+	httpReq.Header.Set("Authorization", "Bearer "+key)
 
 	client := &http.Client{}
 	resp, err := client.Do(httpReq)
