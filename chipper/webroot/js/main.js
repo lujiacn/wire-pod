@@ -295,7 +295,10 @@ function sendKGAPIKey() {
   if (provider === "openai") {
     data.key = getE("openaiKey").value;
     data.endpoint = getE("customAIEndpoint").value;
+<<<<<<< HEAD
     data.model = getE("customModel").value;
+=======
+>>>>>>> e624095 (make customeAIEndpoint enable for openAI config)
     data.openai_prompt = getE("openAIPrompt").value;
     data.intentgraph = getE("intentyes").checked
     data.save_chat = getE("saveChatYes").checked
