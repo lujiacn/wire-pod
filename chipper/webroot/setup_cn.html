@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Wire-Pod 设置</title>
+    <link rel="stylesheet" type="text/css" href="css/style.css" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <script src="https://kit.fontawesome.com/7508f396ac.js" crossorigin="anonymous"></script>
+    <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate, max-age=0">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="Thu, 01 Jan 1970 00:00:00 GMT">
+</head>
+<body>
+    <div id="outer">
+        <div id="content" class="">
+            <h1>Wire-Pod 设置</h1>
+            <hr />
+            <div class="main-nav-parent">
+                <div class="main-nav-child">
+                    <a href="index.html"><i class="fa-solid fa-reply"></i><br />返回</a>
+                </div>
+                <div class="main-nav-child">
+                    <a href="#" onclick="showWeather(); return false;"><i class="fa solid fa-cloud-sun" id="icon-Weather" name="icon"></i><br />天气</a>
+                </div>
+                <div class="main-nav-child">
+                    <a href="#" onclick="showKG(); return false;"><i class="fa solid fa-diagram-project" id="icon-KG" name="icon"></i><br />知识图谱</a>
+                </div>
+                <div class="main-nav-child">
+                    <a href="#" onclick="showLanguage(); return false;"><i class="fa-solid fa-language" id="icon-Language" name="icon"></i><br />设置语言</a>
+                </div>
+                <!--<div class="main-nav-child"><a href="#" onclick="showRestart(); return false;"><i class="fa solid fa-arrow-rotate-right" id="icon-Restart" name="icon"></i><br/>重启 Wire-Pod</a></div> -->
+            </div>
+            <hr />
+            <div id="section-weather" style="display: none">
+                <h3>天气 API 设置</h3>
+                <hr class="small-hr">
+                <div>
+                    <p>设置您想使用的天气提供商。</p>
+                    <hr class="small-hr">
+                    <div id="addWeatherProviderAPI"></div>
+                    <form id="weatherAPIAddForm">
+                        <label for="weatherProvider">天气 API 提供商：</label>
+                        <select name="weatherProvider" id="weatherProvider" form="weatherAPIAddForm" onchange="checkWeather()">
+                            <option value="" selected>无</option>
+                            <option value="openweathermap.org">OpenWeatherMap</option>
+                            <option value="weatherapi.com">WeatherAPI</option>
+                        </select><br />
+                        <span id="apiKeySpan" style="display: none">
+                            <label for="apiKey">API 密钥：</label><br />
+                            <input class="tinput" type="text" name="apiKey" id="apiKey" /><br />
+                        </span>
+                    </form>
+                    <hr class="small-hr">
+                    <button onclick="sendWeatherAPIKey()">应用天气设置</button>
+                    <div id="addWeatherProviderAPIStatus"></div>
+                    <hr />
+                </div>
+            </div>
+            <div id="section-kg" style="display: none">
+                <h3>知识图谱设置</h3>
+                <hr class="small-hr">
+                <div>
+                    <p>选择您想使用的知识提供商，然后输入所需信息。</p>
+                    <hr class="small-hr">
+                    <div id="addKGProviderAPI"></div>
+                    <form id="kgAPIAddForm">
+                        <label for="kgProvider">知识图谱 API 提供商：</label>
+                        <select name="kgProvider" id="kgProvider" form="kgAPIAddForm" onchange="checkKG()">
+                            <option value="" selected>无</option>
+                            <option value="openai">OpenAI</option>
+                            <option value="houndify">Houndify</option>
+                            <option value="together">Together</option>
+                            <option value="custom">自定义</option>
+                        </select>
+                        <span id="houndifyInput" style="display: none">
+                            <small class="desc">要使用 Houndify，请在 <a href="https://www.houndify.com/signup">houndify.com</a> 创建账户，创建一个免费域，并在此输入客户端 ID 和密钥。</small><br />
+                            <label for="houndID">Houndify 客户端 ID：</label>
+                            <input type="text" name="houndID" id="houndID" /><br />
+                            <label for="houndKey">Houndify 客户端密钥：</label>
+                            <input type="text" name="houndKey" id="houndKey" /><br />
+                        </span>
+                        <span id="togetherInput" style="display: none">
+                            <small class="desc">要使用 Together，请在 <a href="https://www.together.xyz">together.com</a> 创建账户，创建一个免费域，并在此输入模型名称和 Together 密钥。</small><br />
+                            <label for="togetherModel">Together 模型名称：<small class="desc">（留空则使用默认的 meta-llama/Llama-3-70b-chat-hf）</small></label>
+                            <input type="text" name="togetherModel" id="togetherModel" /><br />
+                            <label for="togetherKey">Together 密钥：</label>
+                            <input type="text" name="togetherKey" id="togetherKey" /><br />
+                            <label for="togetherAIPrompt">GPT 提示 <small class="desc">（留空则使用默认值）：</small></label><br />
+                            <small><label class="desc" for="togetherAIPrompt">（默认值："你是一个名叫 Vector 的有用的动画机器人。保持回答简洁但信息丰富。"）</label></small>
+                            <input type="text" name="togetherAIPrompt" id="togetherAIPrompt" /><br />
+                        </span>
+                        <span id="openAIInput" style="display: none">
+                            <label for="openaiKey">OpenAI 密钥：</label>
+                            <input type="text" name="openaiKey" id="openaiKey" /><br />
+                            <label for="openaiKey">GPT 提示 <small class="desc">（留空则使用默认值）：</small></label><br />
+                            <small><label class="desc" for="openAIPrompt">（默认值："你是一个名叫 Vector 的有用的动画机器人。保持回答简洁但信息丰富。"）</label></small>
+                            <input type="text" name="openAIPrompt" id="openAIPrompt" /><br />
+                            <label for="openaiVoice">非英语语言的 OpenAI TTS 语音：</label><br />
+                            <small class="desc">查看 <a target="_blank" href="https://platform.openai.com/docs/guides/text-to-speech/voice-options">OpenAI 的 TTS 网站</a>以试听每种语音。</small><br />
+                            <select name="openaiVoice" id="openaiVoice">
+                                <option value="fable" selected>Fable</option>
+                                <option value="alloy">Alloy</option>
+                                <option value="echo">Echo</option>
+                                <option value="onyx">Onyx</option>
+                                <option value="nova">Nova</option>
+                                <option value="shimmer">Shimmer</option>
+                            </select>
+                        </span>
+                        <span id="customAIInput" style="display: none">
+                            <small class="desc">支持所有具有 OpenAI API 兼容性的 LLM 主机。适用于高级用户。</small><br />
+                            <label for="customKey">API 密钥 <small class="desc">（对于 ollama，这只是 'ollama'）</small>：</label>
+                            <input type="text" name="customKey" id="customKey" /><br />
+                            <label for="customAIEndpoint">API 端点 <small class="desc">（例如 http://localhost:11434/v1）</small>：</label>
+                            <input type="text" name="customAIEndpoint" id="customAIEndpoint" /><br />
+                            <label for="customModel">LLM 模型名称 <small class="desc">（例如 'llama3'）</small>：</label>
+                            <input type="text" name="customModel" id="customModel" /><br />
+                            <label for="customAIPrompt">LLM 提示 <small class="desc">（留空则使用默认值）</small>：</label><br />
+                            <small><label class="desc" for="customAIPrompt">（默认值："你是一个名叫 Vector 的有用的动画机器人。保持回答简洁但信息丰富。"）</label></small>
+                            <input type="text" name="customAIPrompt" id="customAIPrompt" /><br />
+                        </span>
+                        <div style="text-align: left;">
+                            <span id="intentGraphInput" style="display: none;">
+                                <input type="checkbox" id="intentyes" name="intentgselect" onclick="checkKG()" />
+                                <label class="checkbox-label" for="intentyes">启用意图图谱。如果常规意图处理器无法理解您所说的内容，这将把请求转发给 LLM。</label>
+                            </span>
+                            <span id="llmCommandInput" style="display: none">
+                                <input type="checkbox" id="commandYes" name="commandDoselect" />
+                                <label class="checkbox-label" for="commandYes">允许 LLM 在回应过程中让机器人执行动画和其他动作。</label>
+                            </span>
+                            <span id="saveChatInput" style="display: none">
+                                <input type="checkbox" id="saveChatYes" name="saveChatselect" />
+                                <label class="checkbox-label" for="saveChatYes">通过"我有一个问题"启用对话。这也允许在未来回应的上下文中使用之前的聊天记录。必须启用 LLM 动作（上面的复选框）才能进行对话。</label></br>
+                                <a href="#" onclick="deleteSavedChats()">删除保存的聊天记录</a>
+                            </span>
+                            <span id="openAIVoiceForEnglishInput" style="display: none">
+                                <input type="checkbox" id="voiceEnglishYes" name="voiceEnglishselect" />
+                                <label class="checkbox-label" for="voiceEnglishYes">也为英语使用 OpenAI TTS 语音。</label>
+                            </span>
+                        </div>
+                    </form>
+                </div>
+                <hr class="small-hr">
+                <button onclick="sendKGAPIKey()">应用设置</button>
+                <div id="addKGProviderAPIStatus"></div>
+                <hr />
+            </div>
+            <div id="section-restart" style="display: none">
+                <h3>重启 Wire-Pod</h3>
+                <div>
+                    <p>重启 Wire-Pod 以立即应用初始设置</p>
+                    <div id="restart"></div>
+                    <div>
+                        <button onclick="sendRestart()">重启 Wire-Pod</button>
+                    </div>
+                    <div id="restartStatus"></div>
+                    <hr />
+                </div>
+            </div>
+            <div id="section-language" style="display: none">
+                <h2>STT 语言</h2>
+                <hr class="small-hr">
+                <p>设置您希望 wire-pod 使用的语音转文本语言。</p>
+                <hr class="small-hr">
+                <div id="languageStatus"></div>
+                <div id="languageSelectionDiv">
+                    <div>
+                        <select name="languageSelection" id="languageSelection">
+                            <option value="en-US">英语（美国）</option>
+                            <option value="it-IT">意大利语（意大利）</option>
+                            <option value="es-ES">西班牙语（西班牙）</option>
+                            <option value="fr-FR">法语（法国）</option>
+                            <option value="de-DE">德语（德国）</option>
+                            <option value="pt-BR">葡萄牙语（巴西）</option>
+                            <option value="pl-PL">波兰语（波兰）</option>
+                            <option value="tr-TR">土耳其语（土耳其）</option>
+                            <option value="zh-CN">中文（中国）</option>
+                            <option value="ru-RU">俄语（俄罗斯）</option>
+                            <option value="nt-NL">荷兰语（荷兰）</option>
+                        </select>
+                    </div>
+                    <div>
+                        <hr class="small-hr">
+                        <button onclick="setSTTLanguage()">设置语言</button>
+                    </div>
+                </div>
+                <hr />
+            </div>
+        </div>
+    </div>
+</body>
+<script src="./js/ui.js"></script>
+<script src="./js/main.js"></script>
+<script src="./sdkapp/js/main.js"></script>
+<script>
+    updateWeatherAPI();
+    updateKGAPI();
+</script>
+</html>
