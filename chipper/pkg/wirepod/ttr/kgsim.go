@@ -195,10 +195,13 @@ func StreamingKGSim(req interface{}, esn string, transcribedText string, isKG bo
 			return err.Error(), err
 		}
 	}
-	_, err := robot.Conn.BatteryState(context.Background(), &vectorpb.BatteryStateRequest{})
+	resp, err := robot.Conn.BatteryState(context.Background(), &vectorpb.BatteryStateRequest{})
 	if err != nil {
 		return "", err
 	}
+
+	logger.Println("Battery state: " + resp.GetBatteryLevel().String())
+
 	if isKG {
 		BControl(robot, ctx, start, stop)
 		go func() {
