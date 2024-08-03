@@ -114,6 +114,7 @@ func removeEmojis(input string) string {
 	return result
 }
 
+// openai request
 func CreateAIReq(transcribedText, esn string, gpt3tryagain, isKG bool) openai.ChatCompletionRequest {
 	defaultPrompt := "You are a helpful, animated robot called Vector. Keep the response concise yet informative."
 
@@ -130,14 +131,16 @@ func CreateAIReq(transcribedText, esn string, gpt3tryagain, isKG bool) openai.Ch
 
 	var model string
 
-	if gpt3tryagain {
-		model = openai.GPT3Dot5Turbo
-	} else if vars.APIConfig.Knowledge.Provider == "openai" {
-		model = openai.GPT4oMini
-		logger.Println("Using " + model)
+	if v := strings.TrimSpace(vars.APIConfig.Knowledge.Model); v != "" {
+		model = v
 	} else {
-		logger.Println("Using " + vars.APIConfig.Knowledge.Model)
-		model = vars.APIConfig.Knowledge.Model
+		model = "gpt-4o-mini"
+	}
+
+	if vars.APIConfig.Knowledge.Provider == "openai" {
+		if gpt3tryagain {
+			model = openai.GPT3Dot5Turbo
+		}
 	}
 
 	smsg.Content = CreatePrompt(smsg.Content, model, isKG)
@@ -232,7 +235,13 @@ func StreamingKGSim(req interface{}, esn string, transcribedText string, isKG bo
 		conf.BaseURL = vars.APIConfig.Knowledge.Endpoint
 		c = openai.NewClientWithConfig(conf)
 	} else if vars.APIConfig.Knowledge.Provider == "openai" {
-		c = openai.NewClient(vars.APIConfig.Knowledge.Key)
+		conf := openai.DefaultConfig(vars.APIConfig.Knowledge.Key)
+
+		// use endpoint if added for openai
+		if v := vars.APIConfig.Knowledge.Endpoint; v != "" {
+			conf.BaseURL = v
+		}
+		c = openai.NewClientWithConfig(conf)
 	}
 	speakReady := make(chan string)
 	successIntent := make(chan bool)
