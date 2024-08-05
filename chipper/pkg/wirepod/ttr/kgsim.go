@@ -166,6 +166,7 @@ func CreateAIReq(transcribedText, esn string, gpt3tryagain, isKG bool) openai.Ch
 		Messages:         nChat,
 		Stream:           true,
 	}
+	logger.Println("Debug check aireq", aireq.Model)
 	return aireq
 }
 
@@ -277,14 +278,17 @@ func StreamingKGSim(req interface{}, esn string, transcribedText string, isKG bo
 			return "", err
 		}
 	}
+
 	nChat := aireq.Messages
 	nChat = append(nChat, openai.ChatCompletionMessage{
 		Role: openai.ChatMessageRoleAssistant,
 	})
+
 	fmt.Println("LLM stream response: ")
 	go func() {
 		for {
 			response, err := stream.Recv()
+			logger.Println("in stream recv", err)
 			if errors.Is(err, io.EOF) {
 				// prevents a crash
 				if len(fullRespSlice) == 0 {
