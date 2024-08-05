@@ -360,8 +360,10 @@ func StreamingKGSim(req interface{}, esn string, transcribedText string, isKG bo
 					sepStr = "!"
 				}
 				splitResp := strings.Split(strings.TrimSpace(fullRespText), sepStr)
+				logger.Println("Debug slitResp", fullRespSlice)
 				fullRespSlice = append(fullRespSlice, strings.TrimSpace(splitResp[0])+sepStr)
 				fullRespText = splitResp[1]
+				logger.Println("Debug fullRespText", fullRespSlice)
 				select {
 				case successIntent <- true:
 				default:
