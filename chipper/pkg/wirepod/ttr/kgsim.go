@@ -310,6 +310,7 @@ func StreamingKGSim(req interface{}, esn string, transcribedText string, isKG bo
 				if !isKG {
 					IntentPass(req, "intent_greeting_hello", transcribedText, map[string]string{}, false)
 				}
+				logger.Println("Debug fullResponse", fullResponse, isKG)
 				go speakResponse(robot, ctx, fullResponse, isKG, stop, stopStop)
 			}
 		case err := <-errChan:
@@ -358,14 +359,14 @@ func speakResponse(robot *vector.Vector, ctx context.Context, response string, i
 	TTSLoopStopped := make(chan bool)
 
 	// Play initial animation
-	_, err := robot.Conn.PlayAnimation(ctx, &vectorpb.PlayAnimationRequest{
+	resp, err := robot.Conn.PlayAnimation(ctx, &vectorpb.PlayAnimationRequest{
 		Animation: &vectorpb.Animation{Name: TTSGetinAnimation},
 		Loops:     1,
 	})
 
-	if err != nil {
-		logger.Println("Error playing initial animation:", err)
-	}
+	// if err != nil {
+	logger.Println("Error playing initial animation:", resp.String(), err)
+	// }
 
 	// Start TTS loop animation if commands are not enabled
 	if !vars.APIConfig.Knowledge.CommandsEnable {
