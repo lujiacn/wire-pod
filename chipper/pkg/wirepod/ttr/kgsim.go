@@ -285,13 +285,15 @@ func StreamingKGSim(req interface{}, esn string, transcribedText string, isKG bo
 	})
 
 	fmt.Println("LLM stream response: ")
+	var i = 0
 	go func() {
 		for {
+			i = i + i
 			response, err := stream.Recv()
 			logger.Println("in stream recv", err)
 			if errors.Is(err, io.EOF) {
 				// prevents a crash
-				if len(fullRespSlice) == 0 {
+				if len(fullRespSlice) == 0 && i > 1 {
 					logger.Println("LLM returned no response")
 					successIntent <- false
 					if isKG {
