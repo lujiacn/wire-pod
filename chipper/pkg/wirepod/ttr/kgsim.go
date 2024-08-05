@@ -401,6 +401,7 @@ func speakResponse(robot *vector.Vector, ctx context.Context, response string, i
 
 		logger.Println("Speaking:", sentence)
 		acts := GetActionsFromString(sentence)
+		logger.Println("acts", acts)
 		disconnect := PerformActions(nil, acts, robot, stopStop) // Assuming PerformActions can handle nil for nChat
 		if disconnect {
 			break
