@@ -267,7 +267,7 @@ func StreamingKGSim(req interface{}, esn string, transcribedText string, isKG bo
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 
-	start := make(chan bool)
+	// start := make(chan bool)
 	stop := make(chan bool)
 	stopStop := make(chan bool)
 	kgReadyToAnswer := make(chan bool)
@@ -310,7 +310,7 @@ func StreamingKGSim(req interface{}, esn string, transcribedText string, isKG bo
 				if !isKG {
 					IntentPass(req, "intent_greeting_hello", transcribedText, map[string]string{}, false)
 				}
-				go speakResponse(robot, ctx, fullResponse, isKG, start, stop, stopStop)
+				go speakResponse(robot, ctx, fullResponse, isKG, stop, stopStop)
 			}
 		case err := <-errChan:
 			if err == io.EOF {
@@ -344,7 +344,7 @@ func splitIntoSentences(text string) []string {
 	return sentences
 }
 
-func speakResponse(robot *vector.Vector, ctx context.Context, response string, isKG bool, start, stop, stopStop chan bool) {
+func speakResponse(robot *vector.Vector, ctx context.Context, response string, isKG bool, stop, stopStop chan bool) {
 	var TTSLoopAnimation, TTSGetinAnimation string
 	if isKG {
 		TTSLoopAnimation = "anim_knowledgegraph_answer_01"
