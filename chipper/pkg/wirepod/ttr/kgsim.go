@@ -295,7 +295,7 @@ func StreamingKGSim(req interface{}, esn string, transcribedText string, isKG bo
 	var fullRespText string
 	var fullRespSlice []string
 
-	var isDone bool
+	// var isDone bool
 	var c *openai.Client
 
 	c, err = getAIClient()
@@ -334,9 +334,13 @@ func StreamingKGSim(req interface{}, esn string, transcribedText string, isKG bo
 	// 	Content: fullRespText,
 	// })
 
-	go func() {
-		// Assuming response is populated, process the response
-		if fullRespText != "" {
+	// Log the response
+	logger.LogUI("Received response: " + fullRespText)
+	fullRespSlice = splitFullRespText(fullRespText)
+
+	if fullRespText != "" {
+		go func() {
+			// Assuming response is populated, process the response
 
 			// Optionally save chat if the API config allows it
 			if vars.APIConfig.Knowledge.SaveChat {
@@ -369,9 +373,9 @@ func StreamingKGSim(req interface{}, esn string, transcribedText string, isKG bo
 				}
 			}
 
-		}
-		logger.Println("Response processing finished.")
-	}()
+			logger.Println("Response processing finished.")
+		}()
+	}
 
 	for is := range successIntent {
 		if is {
@@ -446,32 +450,32 @@ func StreamingKGSim(req interface{}, esn string, transcribedText string, isKG bo
 			}()
 		}
 		var disconnect bool
-		numInResp := 0
-		for {
-			respSlice := fullRespSlice
-			if len(respSlice)-1 < numInResp {
-				if !isDone {
-					logger.Println("Waiting for more content from LLM...")
-					for range speakReady {
-						respSlice = fullRespSlice
-						break
-					}
-				} else {
-					break
-				}
-			}
+		// numInResp := 0
+		for _, respText := range fullRespSlice {
+			// respSlice := fullRespSlice
+			// if len(respSlice)-1 < numInResp {
+			// 	if !isDone {
+			// 		logger.Println("Waiting for more content from LLM...")
+			// 		for range speakReady {
+			// 			respSlice = fullRespSlice
+			// 			break
+			// 		}
+			// 	} else {
+			// 		break
+			// 	}
+			// }
 			if interrupted {
 				break
 			}
-			logger.Println(respSlice[numInResp])
-			acts := GetActionsFromString(respSlice[numInResp])
+			logger.Println(respText)
+			acts := GetActionsFromString(respText)
 			// nChat[len(nChat)-1].Content = fullRespText
 
 			disconnect = PerformActions2(acts, robot, stopStop)
 			if disconnect {
 				break
 			}
-			numInResp = numInResp + 1
+			// numInResp = numInResp + 1
 		}
 		if !vars.APIConfig.Knowledge.CommandsEnable {
 			stopTTSLoop = true
