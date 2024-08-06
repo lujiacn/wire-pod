@@ -326,13 +326,7 @@ func StreamingKGSim(req interface{}, esn string, transcribedText string, isKG bo
 
 	fullRespText = resp.Choices[0].Message.Content
 
-	fmt.Println("LLM stream response: ")
-
-	// nChat := aireq.Messages
-	// nChat = append(nChat, openai.ChatCompletionMessage{
-	// 	Role:    openai.ChatMessageRoleAssistant,
-	// 	Content: fullRespText,
-	// })
+	fmt.Println("LLM stream response: ", fullRespText)
 
 	// Log the response
 	logger.LogUI("Received response: " + fullRespText)
@@ -469,6 +463,7 @@ func StreamingKGSim(req interface{}, esn string, transcribedText string, isKG bo
 			}
 			logger.Println(respText)
 			acts := GetActionsFromString(respText)
+			logger.Println("Debug acts", acts)
 			// nChat[len(nChat)-1].Content = fullRespText
 
 			disconnect = PerformActions2(acts, robot, stopStop)
@@ -483,6 +478,7 @@ func StreamingKGSim(req interface{}, esn string, transcribedText string, isKG bo
 				break
 			}
 		}
+
 		time.Sleep(time.Millisecond * 100)
 		// if isKG {
 		// 	robot.Conn.PlayAnimation(
