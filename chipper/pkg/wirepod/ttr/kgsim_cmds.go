@@ -344,7 +344,7 @@ func DoSayText_OpenAI(robot *vector.Vector, input string) error {
 		conf.BaseURL = v
 	}
 
-	logger.Println("Debug openai config", conf)
+	logger.Println("Debug openai config", conf.BaseURL)
 
 	// oc := openai.NewClient(vars.APIConfig.Knowledge.Key)
 	oc := openai.NewClientWithConfig(conf)
