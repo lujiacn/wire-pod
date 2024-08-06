@@ -97,7 +97,7 @@ func makeOpenAIReq(in []byte) string {
 	client := &http.Client{}
 	resp, err := client.Do(httpReq)
 	if err != nil {
-		logger.Println(err)
+		logger.Println("error during send whisper request", err)
 		return "There was an error."
 	}
 
