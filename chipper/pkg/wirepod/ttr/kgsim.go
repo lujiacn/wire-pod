@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"log"
 	"regexp"
 	"strings"
@@ -164,43 +163,115 @@ func CreateAIReq(transcribedText, esn string, gpt3tryagain, isKG bool) openai.Ch
 		FrequencyPenalty: 0,
 		PresencePenalty:  0,
 		Messages:         nChat,
-		Stream:           true,
+		// Stream:           true,
 	}
 	return aireq
 }
 
-func StreamingKGSim(req interface{}, esn string, transcribedText string, isKG bool) (string, error) {
-	start := make(chan bool)
-	stop := make(chan bool)
-	stopStop := make(chan bool)
-	kgReadyToAnswer := make(chan bool)
-	kgStopLooping := false
-	ctx := context.Background()
-	matched := false
-	var robot *vector.Vector
-	var guid string
-	var target string
+func getRobot(esn string) (*vector.Vector, error) {
 	for _, bot := range vars.BotInfo.Robots {
 		if esn == bot.Esn {
-			guid = bot.GUID
-			target = bot.IPAddress + ":443"
-			matched = true
+			return vector.New(
+				vector.WithSerialNo(esn),
+				vector.WithToken(bot.GUID),
+				vector.WithTarget(bot.IPAddress+":443"),
+			)
+		}
+	}
+	return nil, errors.New("robot not found")
+}
+
+func checkBatteryState(ctx context.Context, robot *vector.Vector) error {
+	resp, err := robot.Conn.BatteryState(ctx, &vectorpb.BatteryStateRequest{})
+	if err != nil {
+		return fmt.Errorf("failed to get battery state: %w", err)
+	}
+	logger.Println("Battery state: " + resp.GetBatteryLevel().String())
+	return nil
+}
+
+func getAIClient() (*openai.Client, error) {
+	var c *openai.Client
+	var conf openai.ClientConfig
+
+	switch vars.APIConfig.Knowledge.Provider {
+	case "together":
+		if vars.APIConfig.Knowledge.Model == "" {
+			vars.APIConfig.Knowledge.Model = "meta-llama/Llama-3-70b-chat-hf"
+			vars.WriteConfigToDisk()
+		}
+		conf = openai.DefaultConfig(vars.APIConfig.Knowledge.Key)
+		conf.BaseURL = "https://api.together.xyz/v1"
+
+	case "custom":
+		conf = openai.DefaultConfig(vars.APIConfig.Knowledge.Key)
+		conf.BaseURL = vars.APIConfig.Knowledge.Endpoint
+
+	case "openai":
+		conf = openai.DefaultConfig(vars.APIConfig.Knowledge.Key)
+		if v := vars.APIConfig.Knowledge.Endpoint; v != "" {
+			conf.BaseURL = v
+		}
+
+	default:
+		return nil, fmt.Errorf("unknown AI provider: %s", vars.APIConfig.Knowledge.Provider)
+	}
+
+	c = openai.NewClientWithConfig(conf)
+	return c, nil
+}
+
+// to send to TTS by batch
+func splitFullRespText(fullRespText string) []string {
+	separators := []string{"...", ".\"", ".'", ".", "?", "!"}
+	fullRespText = strings.TrimSpace(fullRespText)
+	var fragments []string
+
+	for len(fullRespText) > 0 {
+		found := false
+		for _, sep := range separators {
+			if idx := strings.Index(fullRespText, sep); idx != -1 {
+				fragment := strings.TrimSpace(fullRespText[:idx+len(sep)])
+				fragments = append(fragments, fragment)
+				fullRespText = strings.TrimSpace(fullRespText[idx+len(sep):])
+				found = true
+				break
+			}
+		}
+		if !found {
+			// If no separator is found, add the remaining text as the last fragment
+			fragments = append(fragments, fullRespText)
 			break
 		}
 	}
-	if matched {
-		var err error
-		robot, err = vector.New(vector.WithSerialNo(esn), vector.WithToken(guid), vector.WithTarget(target))
-		if err != nil {
-			return err.Error(), err
-		}
+	return fragments
+}
+
+func StreamingKGSim(req interface{}, esn string, transcribedText string, isKG bool) (string, error) {
+
+	var robot *vector.Vector
+	var err error
+
+	start := make(chan bool)
+	stop := make(chan bool)
+	stopStop := make(chan bool)
+
+	kgReadyToAnswer := make(chan bool)
+	kgStopLooping := false
+
+	ctx := context.Background()
+
+	robot, err = getRobot(esn)
+
+	if err != nil {
+		return err.Error(), err
 	}
-	resp, err := robot.Conn.BatteryState(context.Background(), &vectorpb.BatteryStateRequest{})
+
+	err = checkBatteryState(ctx, robot)
+
 	if err != nil {
 		return "", err
 	}
-
-	logger.Println("Battery state: " + resp.GetBatteryLevel().String())
 
 	if isKG {
 		BControl(robot, ctx, start, stop)
@@ -220,153 +291,88 @@ func StreamingKGSim(req interface{}, esn string, transcribedText string, isKG bo
 			}
 		}()
 	}
+
 	var fullRespText string
-	var fullfullRespText string
 	var fullRespSlice []string
+
 	var isDone bool
 	var c *openai.Client
-	if vars.APIConfig.Knowledge.Provider == "together" {
-		if vars.APIConfig.Knowledge.Model == "" {
-			vars.APIConfig.Knowledge.Model = "meta-llama/Llama-3-70b-chat-hf"
-			vars.WriteConfigToDisk()
-		}
-		conf := openai.DefaultConfig(vars.APIConfig.Knowledge.Key)
-		conf.BaseURL = "https://api.together.xyz/v1"
-		c = openai.NewClientWithConfig(conf)
-	} else if vars.APIConfig.Knowledge.Provider == "custom" {
-		conf := openai.DefaultConfig(vars.APIConfig.Knowledge.Key)
-		conf.BaseURL = vars.APIConfig.Knowledge.Endpoint
-		c = openai.NewClientWithConfig(conf)
-	} else if vars.APIConfig.Knowledge.Provider == "openai" {
-		conf := openai.DefaultConfig(vars.APIConfig.Knowledge.Key)
 
-		// use endpoint if added for openai
-		if v := vars.APIConfig.Knowledge.Endpoint; v != "" {
-			conf.BaseURL = v
-		}
-		c = openai.NewClientWithConfig(conf)
-	}
+	c, err = getAIClient()
+
 	speakReady := make(chan string)
 	successIntent := make(chan bool)
 
 	aireq := CreateAIReq(transcribedText, esn, false, isKG)
 
-	stream, err := c.CreateChatCompletionStream(ctx, aireq)
+	// stream, err := c.CreateChatCompletionStream(ctx, aireq)
+
+	resp, err := c.CreateChatCompletion(ctx, aireq)
 	if err != nil {
-		if strings.Contains(err.Error(), "does not exist") && vars.APIConfig.Knowledge.Provider == "openai" {
-			logger.Println("GPT-4 model cannot be accessed with this API key. You likely need to add more than $5 dollars of funds to your OpenAI account.")
-			logger.LogUI("GPT-4 model cannot be accessed with this API key. You likely need to add more than $5 dollars of funds to your OpenAI account.")
-			aireq := CreateAIReq(transcribedText, esn, true, isKG)
-			logger.Println("Falling back to " + aireq.Model)
-			logger.LogUI("Falling back to " + aireq.Model)
-			stream, err = c.CreateChatCompletionStream(ctx, aireq)
-			if err != nil {
-				logger.Println("OpenAI still not returning a response even after falling back. Erroring.")
-				return "", err
+		// Handle error
+		logger.Println(fmt.Sprintf("LLM %s requst failure %v", vars.APIConfig.Knowledge.Provider, err))
+		if isKG {
+			kgStopLooping = true
+			for range kgReadyToAnswer {
+				break
 			}
-		} else {
-			if isKG {
-				kgStopLooping = true
-				for range kgReadyToAnswer {
-					break
-				}
-				stop <- true
-				time.Sleep(time.Second / 3)
-				KGSim(esn, "There was an error getting data from the L. L. M.")
-			}
-			return "", err
+
+			stop <- true
+			time.Sleep(time.Second / 3)
+			KGSim(esn, "There was an error getting data from the L. L. M.")
 		}
+		return "", err
 	}
-	nChat := aireq.Messages
-	nChat = append(nChat, openai.ChatCompletionMessage{
-		Role: openai.ChatMessageRoleAssistant,
-	})
+
+	fullRespText = resp.Choices[0].Message.Content
+
 	fmt.Println("LLM stream response: ")
+
+	// nChat := aireq.Messages
+	// nChat = append(nChat, openai.ChatCompletionMessage{
+	// 	Role:    openai.ChatMessageRoleAssistant,
+	// 	Content: fullRespText,
+	// })
+
 	go func() {
-		for {
-			response, err := stream.Recv()
-			if errors.Is(err, io.EOF) {
-				// prevents a crash
-				if len(fullRespSlice) == 0 {
-					logger.Println("LLM returned no response")
-					successIntent <- false
-					if isKG {
-						kgStopLooping = true
-						for range kgReadyToAnswer {
-							break
-						}
-						stop <- true
-						time.Sleep(time.Second / 3)
-						KGSim(esn, "There was an error getting data from the L. L. M.")
-					}
-					break
-				}
-				isDone = true
-				// if fullRespSlice != fullRespText, add that missing bit to fullRespSlice
-				newStr := fullRespSlice[0]
-				for i, str := range fullRespSlice {
-					if i == 0 {
-						continue
-					}
-					newStr = newStr + " " + str
-				}
-				if strings.TrimSpace(newStr) != strings.TrimSpace(fullfullRespText) {
-					logger.Println("LLM debug: there is content after the last punctuation mark")
-					extraBit := strings.TrimPrefix(fullRespText, newStr)
-					fullRespSlice = append(fullRespSlice, extraBit)
-				}
-				if vars.APIConfig.Knowledge.SaveChat {
-					Remember(openai.ChatCompletionMessage{
+		// Assuming response is populated, process the response
+		if fullRespText != "" {
+
+			// Optionally save chat if the API config allows it
+			if vars.APIConfig.Knowledge.SaveChat {
+				Remember(
+					openai.ChatCompletionMessage{
 						Role:    openai.ChatMessageRoleUser,
 						Content: transcribedText,
 					},
-						openai.ChatCompletionMessage{
-							Role:    openai.ChatMessageRoleAssistant,
-							Content: newStr,
-						},
-						esn)
-				}
-				logger.LogUI("LLM response for " + esn + ": " + newStr)
-				logger.Println("LLM stream finished")
-				return
+					openai.ChatCompletionMessage{
+						Role:    openai.ChatMessageRoleAssistant,
+						Content: fullRespText,
+					},
+					esn,
+				)
 			}
 
-			if err != nil {
-				logger.Println("Stream error: " + err.Error())
-				return
-			}
+			// Log the response
+			logger.LogUI("Received response: " + fullRespText)
+			fullRespSlice = splitFullRespText(fullRespText)
 
-			fullfullRespText = fullfullRespText + removeSpecialCharacters(response.Choices[0].Delta.Content)
-			fullRespText = fullRespText + removeSpecialCharacters(response.Choices[0].Delta.Content)
-			if strings.Contains(fullRespText, "...") || strings.Contains(fullRespText, ".'") || strings.Contains(fullRespText, ".\"") || strings.Contains(fullRespText, ".") || strings.Contains(fullRespText, "?") || strings.Contains(fullRespText, "!") {
-				var sepStr string
-				if strings.Contains(fullRespText, "...") {
-					sepStr = "..."
-				} else if strings.Contains(fullRespText, ".'") {
-					sepStr = ".'"
-				} else if strings.Contains(fullRespText, ".\"") {
-					sepStr = ".\""
-				} else if strings.Contains(fullRespText, ".") {
-					sepStr = "."
-				} else if strings.Contains(fullRespText, "?") {
-					sepStr = "?"
-				} else if strings.Contains(fullRespText, "!") {
-					sepStr = "!"
-				}
-				splitResp := strings.Split(strings.TrimSpace(fullRespText), sepStr)
-				fullRespSlice = append(fullRespSlice, strings.TrimSpace(splitResp[0])+sepStr)
-				fullRespText = splitResp[1]
+			for _, respText := range fullRespSlice {
+				// Send back success intent and ready to speak if needed
 				select {
 				case successIntent <- true:
 				default:
 				}
 				select {
-				case speakReady <- strings.TrimSpace(splitResp[0]) + sepStr:
+				case speakReady <- respText:
 				default:
 				}
 			}
+
 		}
+		logger.Println("Response processing finished.")
 	}()
+
 	for is := range successIntent {
 		if is {
 			if !isKG {
@@ -377,16 +383,21 @@ func StreamingKGSim(req interface{}, esn string, transcribedText string, isKG bo
 			return "", errors.New("llm returned no response")
 		}
 	}
+
 	time.Sleep(time.Millisecond * 200)
+
 	if !isKG {
 		BControl(robot, ctx, start, stop)
 	}
+
 	interrupted := false
 	go func() {
 		interrupted = InterruptKGSimWhenTouchedOrWaked(robot, stop, stopStop)
 	}()
+
 	var TTSLoopAnimation string
 	var TTSGetinAnimation string
+
 	if isKG {
 		TTSLoopAnimation = "anim_knowledgegraph_answer_01"
 		TTSGetinAnimation = "anim_knowledgegraph_searching_getout_01"
@@ -454,8 +465,9 @@ func StreamingKGSim(req interface{}, esn string, transcribedText string, isKG bo
 			}
 			logger.Println(respSlice[numInResp])
 			acts := GetActionsFromString(respSlice[numInResp])
-			nChat[len(nChat)-1].Content = fullRespText
-			disconnect = PerformActions(nChat, acts, robot, stopStop)
+			// nChat[len(nChat)-1].Content = fullRespText
+
+			disconnect = PerformActions2(acts, robot, stopStop)
 			if disconnect {
 				break
 			}
