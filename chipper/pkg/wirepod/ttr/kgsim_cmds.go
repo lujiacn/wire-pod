@@ -332,18 +332,19 @@ func DoSayText_OpenAI(robot *vector.Vector, input string) error {
 		return nil
 	}
 
+	logger.Println("text to sent to tts-1", input)
+
 	openaiVoice := getOpenAIVoice(vars.APIConfig.Knowledge.OpenAIVoice)
-	// if vars.APIConfig.Knowledge.OpenAIVoice == "" {
-	// 	openaiVoice = openai.VoiceFable
-	// } else {
-	// 	openaiVoice = getOpenAIVoice(vars.APIConfig.Knowledge.OpenAIPrompt)
-	// }
+
+	logger.Println("openaiVoice", openaiVoice)
 
 	conf := openai.DefaultConfig(vars.APIConfig.Knowledge.Key)
 	// use endpoint if added for openai
 	if v := vars.APIConfig.Knowledge.Endpoint; v != "" {
 		conf.BaseURL = v
 	}
+
+	logger.Println("Debug openai config", conf)
 
 	// oc := openai.NewClient(vars.APIConfig.Knowledge.Key)
 	oc := openai.NewClientWithConfig(conf)
@@ -354,8 +355,9 @@ func DoSayText_OpenAI(robot *vector.Vector, input string) error {
 		Voice:          openaiVoice,
 		ResponseFormat: openai.SpeechResponseFormatPcm,
 	})
+
 	if err != nil {
-		logger.Println(err)
+		logger.Println("debug create speech error", err)
 		return err
 	}
 	speechBytes, _ := io.ReadAll(resp)
