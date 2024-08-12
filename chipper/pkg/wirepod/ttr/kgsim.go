@@ -287,7 +287,7 @@ func StreamingKGSim(req interface{}, esn string, transcribedText string, isKG bo
 					},
 					Loops: 1,
 				})
-				time.Sleep(time.Second / 3)
+				time.Sleep(time.Second / 100) // 3 to 100
 			}
 		}()
 	}
@@ -318,7 +318,7 @@ func StreamingKGSim(req interface{}, esn string, transcribedText string, isKG bo
 			}
 
 			stop <- true
-			time.Sleep(time.Second / 3)
+			time.Sleep(time.Second / 100) // 3 to 100
 			KGSim(esn, "There was an error getting data from the L. L. M.")
 		}
 		return "", err
@@ -382,7 +382,7 @@ func StreamingKGSim(req interface{}, esn string, transcribedText string, isKG bo
 		}
 	}
 
-	time.Sleep(time.Millisecond * 200)
+	time.Sleep(time.Millisecond * 10) // 200 to 10
 
 	if !isKG {
 		BControl(robot, ctx, start, stop)
@@ -413,7 +413,7 @@ func StreamingKGSim(req interface{}, esn string, transcribedText string, isKG bo
 				break
 			}
 		} else {
-			time.Sleep(time.Millisecond * 300)
+			time.Sleep(time.Millisecond * 10) // 300 to 10
 		}
 		robot.Conn.PlayAnimation(
 			ctx,
@@ -479,7 +479,7 @@ func StreamingKGSim(req interface{}, esn string, transcribedText string, isKG bo
 			}
 		}
 
-		time.Sleep(time.Millisecond * 100)
+		time.Sleep(time.Millisecond * 10) // 100 to 10
 		// if isKG {
 		// 	robot.Conn.PlayAnimation(
 		// 		ctx,
@@ -584,7 +584,7 @@ func KGSim(esn string, textToSay string) error {
 		var stopTTSLoop bool
 		var TTSLoopStopped bool
 		for range start {
-			time.Sleep(time.Millisecond * 300)
+			time.Sleep(time.Millisecond * 100) // 300 to 100
 			robot.Conn.PlayAnimation(
 				ctx,
 				&vectorpb.PlayAnimationRequest{
