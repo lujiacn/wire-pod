@@ -390,7 +390,7 @@ func DoSayText_OpenAI(robot *vector.Vector, input string) error {
 					},
 				},
 			})
-			time.Sleep(time.Millisecond * 1) // 25 to 1
+			time.Sleep(time.Millisecond * 25) // 25 to 1
 		}
 		vclient.Send(&vectorpb.ExternalAudioStreamRequest{
 			AudioRequestType: &vectorpb.ExternalAudioStreamRequest_AudioStreamComplete{
@@ -398,7 +398,7 @@ func DoSayText_OpenAI(robot *vector.Vector, input string) error {
 			},
 		})
 	}()
-	time.Sleep(pcmLength(chunksToDetermineLength) + (time.Millisecond * 1)) // 50 to 1
+	time.Sleep(pcmLength(chunksToDetermineLength) + (time.Millisecond * 50)) // 50 to 1
 	return nil
 }
 
