@@ -29,11 +29,11 @@ const (
 	ActionGetImage   = 3
 	ActionNewRequest = 4
 	// arg: sound file
-	ActionPlaySound = 4
+	ActionPlaySound = 5
 )
 
+// "happy, veryHappy, sad, verySad, angry, frustrated, dartingEyes, confused, thinking, celebrate, love, excited, shocked, bored, curious, embarrassed, disappointed, joking, proud, apologetic"
 var animationMap [][2]string = [][2]string{
-	//"happy, veryHappy, sad, verySad, angry, dartingEyes, confused, thinking, celebrate"
 	{
 		"happy",
 		"anim_onboarding_reacttoface_happy_01",
@@ -48,11 +48,11 @@ var animationMap [][2]string = [][2]string{
 	},
 	{
 		"verySad",
-		"anim_feedback_meanwords_01",
+		"anim_eyepose_sad",
 	},
 	{
 		"angry",
-		"anim_rtpickup_loop_10",
+		"anim_eyepose_angry",
 	},
 	{
 		"frustrated",
@@ -77,6 +77,42 @@ var animationMap [][2]string = [][2]string{
 	{
 		"love",
 		"anim_feedback_iloveyou_02",
+	},
+	{
+		"excited",
+		"anim_dancebeat_headlift_01",
+	},
+	{
+		"shocked",
+		"anim_eyepose_shocked",
+	},
+	{
+		"bored",
+		"anim_keepaway_idle_side_02",
+	},
+	{
+		"curious",
+		"anim_referencing_curious_01",
+	},
+	{
+		"embarrassed",
+		"anim_eyecontact_giggle_01",
+	},
+	{
+		"disappointed",
+		"anim_feedback_badrobot_02",
+	},
+	{
+		"joking",
+		"anim_eyecontact_lookup_01",
+	},
+	{
+		"proud",
+		"anim_blackjack_victorbust_01",
+	},
+	{
+		"apologetic",
+		"anim_feedback_apology_01",
 	},
 }
 
@@ -106,14 +142,14 @@ var ValidLLMCommands []LLMCommand = []LLMCommand{
 	{
 		Command:         "playAnimationWI",
 		Description:     "Plays an animation on the robot without interrupting speech. This should be used FAR more than the playAnimation command. This is great for storytelling and making any normal response animated. Don't put two of these right next to each other. Use this MANY times. The param choices are the only choices you have. You can't create any.",
-		ParamChoices:    "happy, veryHappy, sad, verySad, angry, frustrated, dartingEyes, confused, thinking, celebrate, love",
+		ParamChoices:    "happy, veryHappy, sad, verySad, angry, frustrated, dartingEyes, confused, thinking, celebrate, love, excited, shocked, bored, curious, embarrassed, disappointed, joking, proud, apologetic",
 		Action:          ActionPlayAnimationWI,
 		SupportedModels: []string{"all"},
 	},
 	{
 		Command:         "playAnimation",
 		Description:     "Plays an animation on the robot. This will interrupt speech. Only use this if you are directed to play an animaion.",
-		ParamChoices:    "happy, veryHappy, sad, verySad, angry, frustrated, dartingEyes, confused, thinking, celebrate, love",
+		ParamChoices:    "happy, veryHappy, sad, verySad, angry, frustrated, dartingEyes, confused, thinking, celebrate, love, excited, shocked, bored, curious, embarrassed, disappointed, joking, proud, apologetic",
 		Action:          ActionPlayAnimation,
 		SupportedModels: []string{"all"},
 	},
@@ -132,12 +168,13 @@ var ValidLLMCommands []LLMCommand = []LLMCommand{
 		Action:          ActionNewRequest,
 		SupportedModels: []string{"all"},
 	},
-	// {
-	// 	Command:      "playSound",
-	// 	Description:  "Plays a sound on the robot.",
-	// 	ParamChoices: "drumroll",
-	// 	Action:       ActionPlaySound,
-	// },
+	{
+		Command:         "playSound",
+		Description:     "Plays a sound on the robot.",
+		ParamChoices:    "drumroll",
+		Action:          ActionPlaySound,
+		SupportedModels: []string{"all"},
+	},
 }
 
 func ModelIsSupported(cmd LLMCommand, model string) bool {
@@ -170,6 +207,8 @@ func CreatePrompt(origPrompt string, model string, isKG bool) string {
 	if os.Getenv("DEBUG_PRINT_PROMPT") == "true" {
 		logger.Println(prompt)
 	}
+
+	// logger.Println("prompt", prompt)
 	return prompt
 }
 
@@ -400,6 +439,8 @@ func DoSayText_OpenAI(robot *vector.Vector, input string) error {
 }
 
 func DoGetImage(msgs []openai.ChatCompletionMessage, param string, robot *vector.Vector, stopStop chan bool) {
+
+	logger.Println("In GetImage function")
 	stopImaging := false
 	go func() {
 		for range stopStop {
@@ -679,6 +720,7 @@ func PerformActions(msgs []openai.ChatCompletionMessage, actions []RobotAction, 
 			go DoNewRequest(robot)
 			return true
 		case action.Action == ActionGetImage:
+			logger.Println("In GetImage function")
 			DoGetImage(msgs, action.Parameter, robot, stopStop)
 			return true
 		case action.Action == ActionPlaySound:

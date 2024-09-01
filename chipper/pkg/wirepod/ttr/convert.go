@@ -3,6 +3,10 @@ package wirepod_ttr
 import (
 	"encoding/binary"
 	"math"
+	"strconv"
+
+	"github.com/kercre123/wire-pod/chipper/pkg/logger"
+	"github.com/kercre123/wire-pod/chipper/pkg/vars"
 )
 
 func bytesToInt16s(data []byte) []int16 {
@@ -25,7 +29,16 @@ func downsample24kTo16k(input []byte) [][]byte {
 	outBytes := downsample24kTo16kLinear(input)
 	var audioChunks [][]byte
 	filteredBytes := lowPassFilter(outBytes, 4000, 16000)
-	iVolBytes := increaseVolume(filteredBytes, 5)
+	// user vars increaseVolume if exist default is 5
+	volInc := 5
+	if v := vars.APIConfig.Knowledge.VolInc; v != "" {
+		vInt, err := strconv.Atoi(v)
+		if err == nil {
+			volInc = vInt
+		}
+	}
+	iVolBytes := increaseVolume(filteredBytes, float64(volInc))
+	logger.Println("VolumeIncrease: ", volInc)
 	for len(iVolBytes) > 0 {
 		if len(iVolBytes) < 1024 {
 			chunk := make([]byte, 1024)

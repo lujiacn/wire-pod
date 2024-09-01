@@ -3,28 +3,37 @@ package logger
 import (
 	"fmt"
 	"os"
+	"strings"
+	"sync"
 	"time"
 )
 
-var debugLogging bool = true
-var LogList string
-var LogArray []string
-
-var LogTrayList string
-var LogTrayArray []string
-var LogTrayChan chan string
+var (
+	debugLogging bool
+	LogList      string
+	LogArray     []string
+	LogTrayList  string
+	LogTrayArray []string
+	LogTrayChan  chan string
+	logMutex     sync.Mutex
+	maxLogSize   = 1000 // Maximum size of a single log entry in bytes
+	maxLogs      = 200  // Maximum number of logs to keep in LogTrayArray
+	maxUILogs    = 50   // Maximum number of logs to keep in LogArray
+)
 
 func GetLogTrayChan() chan string {
 	return LogTrayChan
 }
 
 func Init() {
-	LogTrayChan = make(chan string)
+	LogTrayChan = make(chan string, 100) // Buffered channel
 	if os.Getenv("DEBUG_LOGGING") == "true" {
 		debugLogging = true
 	} else {
 		debugLogging = false
 	}
+	LogArray = make([]string, 0, maxUILogs)
+	LogTrayArray = make([]string, 0, maxLogs)
 }
 
 func Println(a ...any) {
@@ -35,27 +44,49 @@ func Println(a ...any) {
 }
 
 func LogUI(a ...any) {
-	LogArray = append(LogArray, time.Now().Format("2006.01.02 15:04:05")+": "+fmt.Sprint(a...)+"\n")
-	if len(LogArray) >= 50 {
-		LogArray = LogArray[1:]
+	logMutex.Lock()
+	defer logMutex.Unlock()
+
+	logEntry := time.Now().Format("2006.01.02 15:04:05") + ": " + fmt.Sprint(a...) + "\n"
+	if len(logEntry) > maxLogSize {
+		logEntry = logEntry[:maxLogSize] + "...\n"
 	}
-	LogList = ""
+
+	LogArray = append(LogArray, logEntry)
+	if len(LogArray) > maxUILogs {
+		LogArray = LogArray[len(LogArray)-maxUILogs:]
+	}
+
+	var builder strings.Builder
 	for _, b := range LogArray {
-		LogList = LogList + b
+		builder.WriteString(b)
 	}
+	LogList = builder.String()
 }
 
 func LogTray(a ...any) {
-	LogTrayArray = append(LogTrayArray, time.Now().Format("2006.01.02 15:04:05")+": "+fmt.Sprint(a...)+"\n")
-	if len(LogTrayArray) >= 200 {
-		LogTrayArray = LogTrayArray[1:]
+	logMutex.Lock()
+	defer logMutex.Unlock()
+
+	logEntry := time.Now().Format("2006.01.02 15:04:05") + ": " + fmt.Sprint(a...) + "\n"
+	if len(logEntry) > maxLogSize {
+		logEntry = logEntry[:maxLogSize] + "...\n"
 	}
-	LogTrayList = ""
+
+	LogTrayArray = append(LogTrayArray, logEntry)
+	if len(LogTrayArray) > maxLogs {
+		LogTrayArray = LogTrayArray[len(LogTrayArray)-maxLogs:]
+	}
+
+	var builder strings.Builder
 	for _, b := range LogTrayArray {
-		LogTrayList = LogTrayList + b
+		builder.WriteString(b)
 	}
+	LogTrayList = builder.String()
+
 	select {
-	case LogTrayChan <- time.Now().Format("2006.01.02 15:04:05") + ": " + fmt.Sprint(a...) + "\n":
+	case LogTrayChan <- logEntry:
 	default:
+		// Channel is full, log is discarded
 	}
 }

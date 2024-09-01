@@ -266,10 +266,9 @@ func StreamingKGSim(req interface{}, esn string, transcribedText string, isKG bo
 	if err != nil {
 		return err.Error(), err
 	}
-	_, err := robot.Conn.BatteryState(context.Background(), &vectorpb.BatteryStateRequest{})
-	if err != nil {
-		return "", err
-	}
+
+	checkBatteryState(ctx, robot)
+
 	if isKG {
 		BControl(robot, ctx, start, stop)
 		go func() {
@@ -367,6 +366,7 @@ func StreamingKGSim(req interface{}, esn string, transcribedText string, isKG bo
 			}
 
 		}
+		isDone = true // new added
 		logger.Println("Response processing finished.")
 	}()
 

@@ -30,6 +30,7 @@ type apiConfig struct {
 		RobotName              string `json:"robotName"`
 		OpenAIPrompt           string `json:"openai_prompt"`
 		OpenAIVoice            string `json:"openai_voice"`
+		VolInc                 string `json:"vol_inc"`
 		OpenAIVoiceWithEnglish bool   `json:"openai_voice_with_english"`
 		SaveChat               bool   `json:"save_chat"`
 		CommandsEnable         bool   `json:"commands_enable"`
@@ -84,7 +85,7 @@ func WriteSTT() {
 	// was not part of the original code, so this is its own function
 	// launched if stt not found in config
 	APIConfig.STT.Service = os.Getenv("STT_SERVICE")
-	if os.Getenv("STT_SERVICE") == "vosk" || os.Getenv("STT_SERVICE") == "whisper.cpp" {
+	if os.Getenv("STT_SERVICE") == "vosk" || os.Getenv("STT_SERVICE") == "whisper.cpp" || os.Getenv("STT_SERVICE") == "whisper" {
 		APIConfig.STT.Language = os.Getenv("STT_LANGUAGE")
 	}
 }

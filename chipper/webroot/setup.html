@@ -5,7 +5,7 @@
   <title>Wire-Pod Setup</title>
   <link rel="stylesheet" type="text/css" href="css/style.css" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <script src="https://kit.fontawesome.com/7508f396ac.js" crossorigin="anonymous"></script>
+  <link rel="stylesheet" type="text/css" href="/public/fontawesome-free/css/all.min.css" />
   <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate, max-age=0">
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="Thu, 01 Jan 1970 00:00:00 GMT">
@@ -137,6 +137,9 @@
                 <option value="shimmer">Shimmer</option>
               </select>
             </span>
+
+              <label for="volInc">Volume Increase Number <small class="desc">(default: 5)</small>:</label>
+              <input type="number" name="volInc" id="volInc" /><br />
 
             <span id="customAIInput" style="display: none">
               <small class="desc">All LLM hosts that have OpenAI API compatibility are supported. For advanced

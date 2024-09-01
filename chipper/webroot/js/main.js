@@ -287,6 +287,7 @@ function sendKGAPIKey() {
     robotName: "",
     openai_prompt: "",
     openai_voice: "",
+    vol_inc: "5",
     openai_voice_with_english: false,
     save_chat: false,
     commands_enable: false,
@@ -301,6 +302,7 @@ function sendKGAPIKey() {
     data.save_chat = getE("saveChatYes").checked
     data.commands_enable = getE("commandYes").checked
     data.openai_voice = getE("openaiVoice").value
+    data.vol_inc = getE("volInc").value
     data.openai_voice_with_english = getE("voiceEnglishYes").checked
   } else if (provider === "custom") {
     data.key = getE("customKey").value;
@@ -359,6 +361,7 @@ function updateKGAPI() {
         getE("customModel").value = data.model;
         getE("openAIPrompt").value = data.openai_prompt;
         getE("openaiVoice").value = data.openai_voice;
+        getE("volInc").value = data.vol_inc;
         getE("commandYes").checked = data.commands_enable
         getE("intentyes").checked = data.intentgraph
         getE("saveChatYes").checked = data.save_chat
@@ -573,7 +576,7 @@ function showLanguage() {
   fetch("/api/get_stt_info")
     .then((response) => response.json())
     .then((parsed) => {
-      if (parsed.provider !== "vosk" && parsed.provider !== "whisper.cpp") {
+      if (parsed.provider !== "vosk" && parsed.provider !== "whisper.cpp" && parsed.provider !== "whispper") {
         displayError("languageStatus", `To set the STT language, the provider must be Vosk or Whisper. The current one is '${parsed.sttProvider}'.`);
         getE("languageSelectionDiv").style.display = "none";
       } else {
