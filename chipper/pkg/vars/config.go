@@ -95,6 +95,11 @@ func WriteSTT() {
 	APIConfig.STT.Service = os.Getenv("STT_SERVICE")
 	if os.Getenv("STT_SERVICE") == "vosk" || os.Getenv("STT_SERVICE") == "whisper.cpp" {
 		APIConfig.STT.Language = os.Getenv("STT_LANGUAGE")
+	} else if APIConfig.STT.Language == "" {
+		// services without an env-controlled language (e.g. the cloud Whisper
+		// API) keep whatever language is already configured instead of
+		// blanking it, which would trip the "not setup" gate on every start
+		APIConfig.STT.Language = "en-US"
 	}
 }
 
