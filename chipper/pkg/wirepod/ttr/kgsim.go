@@ -332,7 +332,11 @@ func StreamingKGSim(req interface{}, esn string, transcribedText string, isKG bo
 			if errors.Is(err, io.EOF) {
 				// prevents a crash
 				if len(fullRespSlice) == 0 {
-					logger.Println("LLM returned no response")
+					if strings.TrimSpace(fullfullRespText) != "" {
+						logger.Println("LLM debug: received text but it could not be split for speech: " + fullfullRespText)
+					} else {
+						logger.Println("LLM returned no response")
+					}
 					successIntent <- false
 					if isKG {
 						kgStopLooping = true
@@ -387,32 +391,25 @@ func StreamingKGSim(req interface{}, esn string, transcribedText string, isKG bo
 
 			fullfullRespText = fullfullRespText + removeSpecialCharacters(response.Choices[0].Delta.Content)
 			fullRespText = fullRespText + removeSpecialCharacters(response.Choices[0].Delta.Content)
-			if strings.Contains(fullRespText, "...") || strings.Contains(fullRespText, ".'") || strings.Contains(fullRespText, ".\"") || strings.Contains(fullRespText, ".") || strings.Contains(fullRespText, "?") || strings.Contains(fullRespText, "!") {
-				var sepStr string
-				if strings.Contains(fullRespText, "...") {
-					sepStr = "..."
-				} else if strings.Contains(fullRespText, ".'") {
-					sepStr = ".'"
-				} else if strings.Contains(fullRespText, ".\"") {
-					sepStr = ".\""
-				} else if strings.Contains(fullRespText, ".") {
-					sepStr = "."
-				} else if strings.Contains(fullRespText, "?") {
-					sepStr = "?"
-				} else if strings.Contains(fullRespText, "!") {
-					sepStr = "!"
+			// split on sentence-ending punctuation, including full-width (CJK)
+			// punctuation, so non-English responses get spoken too
+			separators := []string{"...", ".'", ".\"", ".", "?", "!", "。", "？", "！", "；"}
+			for _, sep := range separators {
+				if !strings.Contains(fullRespText, sep) {
+					continue
 				}
-				splitResp := strings.Split(strings.TrimSpace(fullRespText), sepStr)
-				fullRespSlice = append(fullRespSlice, strings.TrimSpace(splitResp[0])+sepStr)
+				splitResp := strings.SplitN(strings.TrimSpace(fullRespText), sep, 2)
+				fullRespSlice = append(fullRespSlice, strings.TrimSpace(splitResp[0])+sep)
 				fullRespText = splitResp[1]
 				select {
 				case successIntent <- true:
 				default:
 				}
 				select {
-				case speakReady <- strings.TrimSpace(splitResp[0]) + sepStr:
+				case speakReady <- strings.TrimSpace(splitResp[0]) + sep:
 				default:
 				}
+				break
 			}
 		}
 	}()
