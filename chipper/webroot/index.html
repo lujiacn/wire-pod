@@ -1002,6 +1002,12 @@
                   <span><b>OpenAI voice for English</b>Use the OpenAI TTS voice for English responses as well.</span>
                 </label>
               </div>
+              <div id="photoInput" style="display:none">
+                <label class="switch">
+                  <input type="checkbox" id="photoYes" />
+                  <span><b>Send environment photo to LLM</b>Silently take a photo from the robot's camera each time it is woken up, and attach it to the LLM request so it can respond based on what the robot sees. Requires a vision-capable model (e.g. gpt-4o-mini).</span>
+                </label>
+              </div>
 
               <hr class="hr" />
               <button class="btn primary" onclick="sendKGAPIKey()">
@@ -2030,15 +2036,15 @@
     }
 
     /* ------------------------------ knowledge graph ------------------------------ */
-    const KG_IDS = ['houndifyInput', 'togetherInput', 'customAIInput', 'intentGraphInput', 'openAIInput', 'saveChatInput', 'llmCommandInput', 'openAIVoiceForEnglishInput'];
+    const KG_IDS = ['houndifyInput', 'togetherInput', 'customAIInput', 'intentGraphInput', 'openAIInput', 'saveChatInput', 'llmCommandInput', 'openAIVoiceForEnglishInput', 'photoInput'];
     function checkKG() {
       const provider = $('kgProvider').value;
       KG_IDS.forEach((id) => { $(id).style.display = 'none'; });
       if (!provider) return;
       if (provider === 'houndify') { $('houndifyInput').style.display = 'block'; $('intentGraphInput').style.display = 'block'; }
-      else if (provider === 'openai') { $('intentGraphInput').style.display = 'block'; $('openAIInput').style.display = 'block'; $('saveChatInput').style.display = 'block'; $('llmCommandInput').style.display = 'block'; $('openAIVoiceForEnglishInput').style.display = 'block'; }
-      else if (provider === 'together') { $('intentGraphInput').style.display = 'block'; $('togetherInput').style.display = 'block'; $('saveChatInput').style.display = 'block'; $('llmCommandInput').style.display = 'block'; }
-      else if (provider === 'custom') { $('intentGraphInput').style.display = 'block'; $('customAIInput').style.display = 'block'; $('saveChatInput').style.display = 'block'; $('llmCommandInput').style.display = 'block'; }
+      else if (provider === 'openai') { $('intentGraphInput').style.display = 'block'; $('openAIInput').style.display = 'block'; $('saveChatInput').style.display = 'block'; $('llmCommandInput').style.display = 'block'; $('openAIVoiceForEnglishInput').style.display = 'block'; $('photoInput').style.display = 'block'; }
+      else if (provider === 'together') { $('intentGraphInput').style.display = 'block'; $('togetherInput').style.display = 'block'; $('saveChatInput').style.display = 'block'; $('llmCommandInput').style.display = 'block'; $('photoInput').style.display = 'block'; }
+      else if (provider === 'custom') { $('intentGraphInput').style.display = 'block'; $('customAIInput').style.display = 'block'; $('saveChatInput').style.display = 'block'; $('llmCommandInput').style.display = 'block'; $('photoInput').style.display = 'block'; }
     }
     async function updateKGAPI() {
       const data = await apiJSON('/api/get_kg_api');
@@ -2049,6 +2055,7 @@
       $('saveChatYes').checked = !!data.save_chat;
       $('commandYes').checked = !!data.commands_enable;
       $('voiceEnglishYes').checked = !!data.openai_voice_with_english;
+      $('photoYes').checked = !!data.photo_send;
       $('saveChatNum').value = data.save_chat_num || 0;
       if (data.provider === 'openai') {
         $('openaiKey').value = data.key || '';
@@ -2076,7 +2083,7 @@
       const data = {
         enable: true, provider: provider, key: '', model: '', id: '', intentgraph: false, robotName: '',
         openai_prompt: '', openai_voice: '', openai_voice_with_english: false, save_chat: false,
-        commands_enable: false, endpoint: ''
+        commands_enable: false, photo_send: false, endpoint: ''
       };
       if (provider === 'openai') {
         data.key = $('openaiKey').value;
@@ -2087,6 +2094,7 @@
         data.commands_enable = $('commandYes').checked;
         data.openai_voice = $('openaiVoice').value;
         data.openai_voice_with_english = $('voiceEnglishYes').checked;
+        data.photo_send = $('photoYes').checked;
       } else if (provider === 'custom') {
         data.key = $('customKey').value;
         data.model = $('customModel').value;
@@ -2095,6 +2103,7 @@
         data.intentgraph = $('intentyes').checked;
         data.save_chat = $('saveChatYes').checked;
         data.commands_enable = $('commandYes').checked;
+        data.photo_send = $('photoYes').checked;
       } else if (provider === 'together') {
         data.key = $('togetherKey').value;
         data.model = $('togetherModel').value;
@@ -2102,6 +2111,7 @@
         data.intentgraph = $('intentyes').checked;
         data.save_chat = $('saveChatYes').checked;
         data.commands_enable = $('commandYes').checked;
+        data.photo_send = $('photoYes').checked;
       } else if (provider === 'houndify') {
         data.key = $('houndKey').value;
         data.id = $('houndID').value;

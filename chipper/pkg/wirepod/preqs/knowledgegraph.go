@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"regexp"
 	"strings"
+	"time"
 
 	pb "github.com/digital-dream-labs/api/go/chipperpb"
 	"github.com/kercre123/wire-pod/chipper/pkg/logger"
@@ -68,10 +69,28 @@ func houndifyKG(req sr.SpeechRequest) string {
 }
 
 func streamingKG(req *vtt.KnowledgeGraphRequest, speechReq sr.SpeechRequest) string {
+	// as soon as the request comes in (bot was woken up with "hi vector" and
+	// started listening), capture a silent environment photo in parallel with
+	// transcription, so the LLM can answer using both the user input and what
+	// the robot sees
+	photoCh := make(chan string, 1)
+	if vars.APIConfig.Knowledge.Enable && vars.APIConfig.Knowledge.PhotoSend {
+		go func() {
+			photoCh <- ttr.CaptureEnvPhoto(speechReq.Device)
+		}()
+	} else {
+		photoCh <- ""
+	}
 	// have him start "thinking" right after the text is transcribed
 	transcribedText, err := sttHandler(speechReq)
 	if err != nil {
 		return "There was an error."
+	}
+	var photoB64 string
+	select {
+	case photoB64 = <-photoCh:
+	case <-time.After(5 * time.Second):
+		logger.Println("(photo) timed out waiting for photo, continuing without it")
 	}
 	kg := pb.KnowledgeGraphResponse{
 		Session:     req.Session,
@@ -80,7 +99,7 @@ func streamingKG(req *vtt.KnowledgeGraphRequest, speechReq sr.SpeechRequest) str
 		SpokenText:  "bla bla bla bla bla bla bla bla bla bla",
 	}
 	req.Stream.Send(&kg)
-	_, err = ttr.StreamingKGSim(req, req.Device, transcribedText, true)
+	_, err = ttr.StreamingKGSim(req, req.Device, transcribedText, true, photoB64)
 	if err != nil {
 		logger.Println("LLM error: " + err.Error())
 	}

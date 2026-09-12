@@ -76,7 +76,7 @@ func (s *Server) ProcessIntentGraph(req *vtt.IntentGraphRequest) (*vtt.IntentGra
 				}
 			} else {
 				logger.Println("Making LLM request for device " + req.Device + "...")
-				_, err := ttr.StreamingKGSim(req, req.Device, transcribedText, false)
+				_, err := ttr.StreamingKGSim(req, req.Device, transcribedText, false, "")
 				if err != nil {
 					logger.Println("LLM error: " + err.Error())
 					logger.LogUI("LLM error: " + err.Error())
