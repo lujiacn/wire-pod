@@ -32,6 +32,16 @@ const (
 	ActionNewRequest = 4
 	// arg: color name or hue 0-359
 	ActionSetEyeColor = 5
+	// arg: 1-5 / low..high
+	ActionSetVolume = 6
+	// arg: up / down
+	ActionMoveHead = 7
+	// arg: up / down
+	ActionMoveLift = 8
+	// arg: forward / backward [:mm]
+	ActionDrive = 9
+	// arg: left / right [:degrees]
+	ActionTurn = 10
 	// arg: sound file
 	ActionPlaySound = 4
 )
@@ -141,6 +151,41 @@ var ValidLLMCommands []LLMCommand = []LLMCommand{
 		Description:     "Changes the color of the robot's eyes. The parameter is either a color name or a hue number (0-359). Use this whenever the user asks to change the eye color.",
 		ParamChoices:    "red, orange, yellow, green, cyan, blue, purple, pink, white, or a hue number 0-359",
 		Action:          ActionSetEyeColor,
+		SupportedModels: []string{"all"},
+	},
+	{
+		Command:         "setVolume",
+		Description:     "Changes the robot's speaker volume. Use this when the user asks to be louder or quieter.",
+		ParamChoices:    "1, 2, 3, 4, 5 (1 = quietest, 5 = loudest) or low, medium, high",
+		Action:          ActionSetVolume,
+		SupportedModels: []string{"all"},
+	},
+	{
+		Command:         "moveHead",
+		Description:     "Moves the robot's head up or down. Only use this if the user asks you to move your head or look up/down. Do not combine with other commands in the same sentence.",
+		ParamChoices:    "up, down",
+		Action:          ActionMoveHead,
+		SupportedModels: []string{"all"},
+	},
+	{
+		Command:         "moveLift",
+		Description:     "Moves the robot's lift (the arm between the wheels) up or down. Only use this if the user asks you to raise or lower your lift or arms.",
+		ParamChoices:    "up, down",
+		Action:          ActionMoveLift,
+		SupportedModels: []string{"all"},
+	},
+	{
+		Command:         "drive",
+		Description:     "Drives the robot straight forward or backward. The optional number after the colon is the distance in millimeters (default 200, max 1000). Only use this if the user asks you to move or come closer.",
+		ParamChoices:    "forward, backward, forward:300, backward:500",
+		Action:          ActionDrive,
+		SupportedModels: []string{"all"},
+	},
+	{
+		Command:         "turn",
+		Description:     "Turns the robot in place to the left or right. The optional number after the colon is the angle in degrees (default 90, max 360). Only use this if the user asks you to turn or spin around.",
+		ParamChoices:    "left, right, left:180, right:45",
+		Action:          ActionTurn,
 		SupportedModels: []string{"all"},
 	},
 	// {
@@ -336,6 +381,158 @@ func DoSetEyeColor(param string, robot *vector.Vector) error {
 	)
 	if err != nil {
 		logger.Println("(eye color) error: " + err.Error())
+	}
+	return nil
+}
+
+func DoSetVolume(param string, robot *vector.Vector) error {
+	param = strings.ToLower(strings.TrimSpace(param))
+	var level vectorpb.MasterVolumeLevel
+	switch param {
+	case "1", "low":
+		level = vectorpb.MasterVolumeLevel_VOLUME_LOW
+	case "2":
+		level = vectorpb.MasterVolumeLevel_VOLUME_MEDIUM_LOW
+	case "3", "medium":
+		level = vectorpb.MasterVolumeLevel_VOLUME_MEDIUM
+	case "4":
+		level = vectorpb.MasterVolumeLevel_VOLUME_MEDIUM_HIGH
+	case "5", "high", "max", "maximum":
+		level = vectorpb.MasterVolumeLevel_VOLUME_HIGH
+	default:
+		logger.Println("(volume) could not parse volume parameter: " + param)
+		return nil
+	}
+	logger.Println("(volume) setting master volume to " + param)
+	_, err := robot.Conn.SetMasterVolume(
+		context.Background(),
+		&vectorpb.MasterVolumeRequest{
+			VolumeLevel: level,
+		},
+	)
+	if err != nil {
+		logger.Println("(volume) error: " + err.Error())
+	}
+	return nil
+}
+
+func DoMoveHead(param string, robot *vector.Vector) error {
+	param = strings.ToLower(strings.TrimSpace(param))
+	var speed float32
+	switch param {
+	case "up":
+		speed = 2.2
+	case "down":
+		speed = -2.2
+	default:
+		logger.Println("(move head) could not parse parameter: " + param)
+		return nil
+	}
+	logger.Println("(move head) moving head " + param)
+	_, err := robot.Conn.MoveHead(
+		context.Background(),
+		&vectorpb.MoveHeadRequest{
+			SpeedRadPerSec: speed,
+		},
+	)
+	if err != nil {
+		logger.Println("(move head) error: " + err.Error())
+	}
+	return nil
+}
+
+func DoMoveLift(param string, robot *vector.Vector) error {
+	param = strings.ToLower(strings.TrimSpace(param))
+	var speed float32
+	switch param {
+	case "up":
+		speed = 2.2
+	case "down":
+		speed = -2.2
+	default:
+		logger.Println("(move lift) could not parse parameter: " + param)
+		return nil
+	}
+	logger.Println("(move lift) moving lift " + param)
+	_, err := robot.Conn.MoveLift(
+		context.Background(),
+		&vectorpb.MoveLiftRequest{
+			SpeedRadPerSec: speed,
+		},
+	)
+	if err != nil {
+		logger.Println("(move lift) error: " + err.Error())
+	}
+	return nil
+}
+
+func DoDrive(param string, robot *vector.Vector) error {
+	param = strings.ToLower(strings.TrimSpace(param))
+	distance := 200.0
+	if strings.Contains(param, ":") {
+		parts := strings.SplitN(param, ":", 2)
+		if mm, err := strconv.ParseFloat(strings.TrimSpace(parts[1]), 32); err == nil && mm > 0 && mm <= 1000 {
+			distance = mm
+		}
+		param = strings.TrimSpace(parts[0])
+	}
+	var speed float32 = 80.0
+	switch param {
+	case "forward":
+	case "backward":
+		speed = -speed
+	default:
+		logger.Println("(drive) could not parse parameter: " + param)
+		return nil
+	}
+	logger.Println("(drive) driving " + param + " " + fmt.Sprint(distance) + "mm")
+	_, err := robot.Conn.DriveStraight(
+		context.Background(),
+		&vectorpb.DriveStraightRequest{
+			SpeedMmps:           speed,
+			DistMm:              float32(distance),
+			ShouldPlayAnimation: false,
+		},
+	)
+	if err != nil {
+		logger.Println("(drive) error: " + err.Error())
+	}
+	return nil
+}
+
+func DoTurn(param string, robot *vector.Vector) error {
+	param = strings.ToLower(strings.TrimSpace(param))
+	angleDeg := 90.0
+	if strings.Contains(param, ":") {
+		parts := strings.SplitN(param, ":", 2)
+		if deg, err := strconv.ParseFloat(strings.TrimSpace(parts[1]), 32); err == nil && deg > 0 && deg <= 360 {
+			angleDeg = deg
+		}
+		param = strings.TrimSpace(parts[0])
+	}
+	var angleRad float32
+	switch param {
+	case "left":
+		angleRad = float32(angleDeg * math.Pi / 180)
+	case "right":
+		angleRad = float32(-angleDeg * math.Pi / 180)
+	default:
+		logger.Println("(turn) could not parse parameter: " + param)
+		return nil
+	}
+	logger.Println("(turn) turning " + param + " " + fmt.Sprint(angleDeg) + " degrees")
+	_, err := robot.Conn.TurnInPlace(
+		context.Background(),
+		&vectorpb.TurnInPlaceRequest{
+			AngleRad:        angleRad,
+			SpeedRadPerSec:  2.0,
+			AccelRadPerSec2: 10.0,
+			TolRad:          0.09,
+			IsAbsolute:      0,
+		},
+	)
+	if err != nil {
+		logger.Println("(turn) error: " + err.Error())
 	}
 	return nil
 }
@@ -710,6 +907,16 @@ func PerformActions(msgs []openai.ChatCompletionMessage, actions []RobotAction, 
 			DoPlaySound(action.Parameter, robot)
 		case action.Action == ActionSetEyeColor:
 			DoSetEyeColor(action.Parameter, robot)
+		case action.Action == ActionSetVolume:
+			DoSetVolume(action.Parameter, robot)
+		case action.Action == ActionMoveHead:
+			DoMoveHead(action.Parameter, robot)
+		case action.Action == ActionMoveLift:
+			DoMoveLift(action.Parameter, robot)
+		case action.Action == ActionDrive:
+			DoDrive(action.Parameter, robot)
+		case action.Action == ActionTurn:
+			DoTurn(action.Parameter, robot)
 		}
 	}
 	WaitForAnim_Queue(robot.Cfg.SerialNo)
