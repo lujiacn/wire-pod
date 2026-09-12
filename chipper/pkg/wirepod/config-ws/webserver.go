@@ -219,7 +219,10 @@ func handleGetKGAPI(w http.ResponseWriter) {
 
 func handleSetSTTInfo(w http.ResponseWriter, r *http.Request) {
 	var request struct {
-		Language string `json:"language"`
+		Language        string  `json:"language"`
+		WhisperEndpoint *string `json:"whisper_endpoint"`
+		WhisperKey      *string `json:"whisper_key"`
+		WhisperModel    *string `json:"whisper_model"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
 		http.Error(w, "invalid request body", http.StatusBadRequest)
@@ -251,6 +254,17 @@ func handleSetSTTInfo(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	vars.APIConfig.STT.Language = request.Language
+	// optional cloud Whisper API settings (only sent when the service is the
+	// cloud 'whisper' provider); pointers so absent fields keep old values
+	if request.WhisperEndpoint != nil {
+		vars.APIConfig.STT.WhisperEndpoint = strings.TrimSpace(*request.WhisperEndpoint)
+	}
+	if request.WhisperKey != nil {
+		vars.APIConfig.STT.WhisperKey = strings.TrimSpace(*request.WhisperKey)
+	}
+	if request.WhisperModel != nil {
+		vars.APIConfig.STT.WhisperModel = strings.TrimSpace(*request.WhisperModel)
+	}
 	vars.APIConfig.PastInitialSetup = true
 	vars.WriteConfigToDisk()
 	processreqs.ReloadVosk()

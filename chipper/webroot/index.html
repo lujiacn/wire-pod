@@ -1076,6 +1076,12 @@
                   <option value="vi-VN">Vietnamese (VN)</option>
                 </select>
               </div>
+              <div id="whisperConfigDiv" style="display:none;max-width:560px">
+                <div class="field"><label for="whisperEndpoint">Whisper API endpoint <span class="hint">(blank = OpenAI api.openai.com)</span></label><input type="text" id="whisperEndpoint" placeholder="https://api.groq.com/openai/v1/audio/transcriptions" /></div>
+                <div class="field"><label for="whisperKey">Whisper API key</label><input type="password" id="whisperKey" placeholder="gsk_... / sk-..." /></div>
+                <div class="field"><label for="whisperModel">Whisper API model <span class="hint">(blank = whisper-1)</span></label><input type="text" id="whisperModel" placeholder="whisper-large-v3" /></div>
+                <p class="hint" style="color:var(--muted-2);font-size:.78rem">Any OpenAI-compatible transcription API works (OpenAI, Groq, a proxy...). The robot connection stays direct; set the http(s)_proxy environment variables if the API is only reachable through a proxy.</p>
+              </div>
               <div class="bar" style="max-width:360px;margin-bottom:12px"><i id="sttBar"></i></div>
               <button class="btn primary" onclick="setSTTLanguage()">
                 <svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.7 2.5 15.3 0 18M12 3c-2.5 2.7-2.5 15.3 0 18"/></svg>
@@ -2164,21 +2170,35 @@
       state.stt.language = parsed.language || 'en-US';
       $('sttProviderBadge').textContent = (state.stt.provider || 'unknown') + ' · ' + state.stt.language;
       $('initialProviderReadout').textContent = state.stt.provider || 'unknown';
-      if (state.stt.provider !== 'vosk' && state.stt.provider !== 'whisper.cpp') {
+      if (state.stt.provider !== 'vosk' && state.stt.provider !== 'whisper.cpp' && state.stt.provider !== 'whisper') {
         setStatus('languageStatus', "To set the STT language, the provider must be Vosk or Whisper. The current one is '" + (parsed.sttProvider || state.stt.provider) + "'.", 'err');
         $('languageSelectionDiv').style.display = 'none';
+        $('whisperConfigDiv').style.display = 'none';
       } else {
         setStatus('languageStatus', '');
         $('languageSelectionDiv').style.display = 'flex';
         $('languageSelection').value = state.stt.language;
+        const isCloudWhisper = state.stt.provider === 'whisper';
+        $('whisperConfigDiv').style.display = isCloudWhisper ? 'block' : 'none';
+        if (isCloudWhisper) {
+          $('whisperEndpoint').value = parsed.whisper_endpoint || '';
+          $('whisperKey').value = parsed.whisper_key || '';
+          $('whisperModel').value = parsed.whisper_model || '';
+        }
       }
       renderInitialState();
     }
     async function setSTTLanguage() {
       setStatus('languageStatus', 'Setting...', 'warn');
+      const payload = { language: $('languageSelection').value };
+      if (state.stt.provider === 'whisper') {
+        payload.whisper_endpoint = $('whisperEndpoint').value;
+        payload.whisper_key = $('whisperKey').value;
+        payload.whisper_model = $('whisperModel').value;
+      }
       const resp = await apiText('/api/set_stt_info', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ language: $('languageSelection').value })
+        body: JSON.stringify(payload)
       });
       if (resp.includes('downloading')) {
         setStatus('languageStatus', 'Downloading model...', 'warn');
