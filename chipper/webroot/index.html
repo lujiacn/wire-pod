@@ -481,7 +481,7 @@
       </div>
       <div id="navRoot"></div>
       <div class="nav-note">
-        <b>Front-end demo.</b> Everything is simulated in the browser - no requests are sent to wire-pod and nothing is saved. Reloading restores the sample data.
+        <b>Wire-Pod control panel.</b> Data is saved by the wire-pod server on this machine - custom intents in customIntents.json, weather/KG/STT in the server config, per-robot settings in the robot jdoc. Accent color and body font are kept in this browser, like the original UI. This page must be served by wire-pod (port 8080) to load or save data.
       </div>
     </aside>
     <div class="scrim" id="scrim" onclick="closeDrawer()"></div>
@@ -492,7 +492,7 @@
         <button class="menu-btn" id="menuBtn" onclick="toggleDrawer()" aria-label="Menu">
           <svg class="ico" viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
         </button>
-        <span class="badge accent dot hide-sm">Mock mode</span>
+        <span class="badge hide-sm" id="backendBadge">checking backend…</span>
         <div class="spacer"></div>
         <div class="topbar-right">
           <div class="robot-pick">
@@ -546,13 +546,9 @@
               </div>
 
               <div class="wizard-step" id="wizard-step-2" style="display:none">
-                <div class="field" style="max-width:420px">
-                  <label for="initialProvider">Speech-to-text provider <span class="hint">(demo control — read from the server in the real UI)</span></label>
-                  <select id="initialProvider" onchange="checkLanguage()">
-                    <option value="vosk">vosk</option>
-                    <option value="whisper.cpp">whisper.cpp</option>
-                    <option value="other">other (language cannot be set)</option>
-                  </select>
+                <div class="kv" style="max-width:420px">
+                  <span>STT provider (read from the server)</span>
+                  <span id="initialProviderReadout">-</span>
                 </div>
                 <div class="field" style="max-width:320px" id="languageSelectionDiv">
                   <label for="languageSelection">Speech-to-text language</label>
@@ -592,7 +588,6 @@
                 <button class="btn primary" id="initialNextBtn" onclick="initialNext()">Next</button>
               </div>
               <div class="wizard-actions" id="initialDone" style="display:none">
-                <button class="btn" onclick="resetFirstRun()">Reset to first-run state</button>
                 <button class="btn primary" onclick="directToIndex()">Go to main page</button>
               </div>
             </div>
@@ -609,8 +604,8 @@
               <div class="kv"><span>Connection method</span><span id="initialConnState">-</span></div>
               <div class="kv"><span>STT provider / language</span><span id="initialSttState">-</span></div>
               <div class="wizard-actions" style="justify-content:flex-start;margin-top:14px">
-                <button class="btn sm" onclick="resetFirstRun()">Reset to first-run state</button>
-                <button class="btn sm ghost" onclick="directToIndex()">Skip to main page</button>
+                <button class="btn sm" onclick="checkInited()">Refresh state</button>
+                <button class="btn sm ghost" onclick="directToIndex()">Back to main page</button>
               </div>
             </div>
           </div>
@@ -794,7 +789,7 @@
             <div class="card-b">
               <div class="row" style="margin-bottom:12px">
                 <label class="switch" style="margin:0">
-                  <input type="checkbox" id="logdebug" onchange="renderLog()" />
+                  <input type="checkbox" id="logdebug" onchange="pollLog()" />
                   <span><b>Show all logs</b>include debug lines</span>
                 </label>
                 <label class="switch" style="margin:0">
@@ -850,7 +845,7 @@
             <div class="card-h">
               <svg class="ico" viewBox="0 0 24 24"><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></svg>
               <h2>UI settings</h2>
-              <span class="sub">applies immediately, not saved</span>
+              <span class="sub">accent + font saved in this browser, like the original UI</span>
             </div>
             <div class="card-b">
               <div class="grid c2">
@@ -871,6 +866,7 @@
                 <button class="btn sm danger">Danger</button>
                 <a href="#" onclick="return false">A link</a>
               </div>
+              <hr class="hr" />
             </div>
           </div>
         </section>
@@ -1246,8 +1242,12 @@
                   </div>
                 </div>
                 <div class="field">
-                  <label for="fileInput">Play audio (local .wav preview)</label>
+                  <label for="fileInput">Play audio (converted to 8 kHz mono, like the original)</label>
                   <input type="file" id="fileInput" accept=".wav,audio/*" onchange="loadAudio()" />
+                  <button class="btn sm" id="uploadButton" style="display:none" type="button">
+                    <svg class="ico" viewBox="0 0 24 24"><path d="M12 16V4M7 9l5-5 5 5M4 20h16"/></svg>
+                    Send audio to Vector
+                  </button>
                 </div>
               </div>
               <audio id="audioOutput" controls style="width:100%;margin-top:8px"></audio>
@@ -1275,7 +1275,7 @@
             <div class="card-h">
               <svg class="ico" viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>
               <h2>Statistics</h2>
-              <button class="btn sm" style="margin-left:auto" onclick="updateStats(true)">
+              <button class="btn sm" style="margin-left:auto" onclick="updateStats()">
                 <svg class="ico" viewBox="0 0 24 24"><path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4v7h-7"/></svg>
                 Refresh
               </button>
@@ -1292,7 +1292,7 @@
             <div class="card-h">
               <svg class="ico" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="14" rx="2"/><circle cx="8.5" cy="9" r="1.6"/><path d="m4 17 5-4 4 3 3-2.5 4 3.5"/></svg>
               <h2>Photos</h2>
-              <button class="btn sm" style="margin-left:auto" onclick="renderPhotos()">
+              <button class="btn sm" style="margin-left:auto" onclick="getPhotos()">
                 <svg class="ico" viewBox="0 0 24 24"><path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4v7h-7"/></svg>
                 Refresh list
               </button>
@@ -1391,9 +1391,22 @@
 
   <script>
     /* ==========================================================================
-       Wire-Pod redesign - front-end only
-       No fetch / XHR / WebSocket, no localStorage / sessionStorage, no cookies.
-       All state lives in the `state` object and resets on reload.
+       Wire-Pod control panel - single-file redesign, backend-driven.
+       Every piece of data lives on the wire-pod host machine exactly like the
+       previous webroot: custom intents in customIntents.json, weather/KG/STT in
+       the server config, per-robot settings in the robot jdoc. This page talks
+       to the same endpoints the old UI used:
+
+         /api/*                  intents, weather, knowledge graph, STT, logs,
+                                 version, restart, config
+         /api-chipper/*          first-run connection method (ep / ip)
+         /api-ble/*, /api-ssh/*  Bluetooth pairing and OSKR setup
+         /api-sdk/*              per-robot settings, battery, stats, photos,
+                                 faces, control, audio
+
+       The only browser storage used is accentColor / bodyFont in
+       localStorage, exactly like the original js/ui.js.
+       This page must be served by wire-pod (port 8080) to load or save data.
        ========================================================================== */
     'use strict';
 
@@ -1401,6 +1414,21 @@
     const $ = (id) => document.getElementById(id);
     const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
     const nowTime = () => new Date().toLocaleTimeString([], { hour12: false });
+
+    function toast(message, type) {
+      const el = document.createElement('div');
+      el.className = 'toast' + (type ? ' ' + type : '');
+      el.innerHTML = svg(type === 'err' ? 'x' : type === 'warn' ? 'info' : 'check') + '<div>' + esc(message) + '</div>';
+      $('toasts').appendChild(el);
+      setTimeout(() => { el.style.opacity = '0'; el.style.transform = 'translateX(16px)'; el.style.transition = 'all .25s'; }, 3600);
+      setTimeout(() => el.remove(), 4100);
+    }
+    function setStatus(id, message, kind) {
+      const el = $(id);
+      if (!el) return;
+      el.className = 'status' + (kind ? ' ' + kind : '');
+      el.textContent = message || '';
+    }
 
     const ICONS = {
       grid: '<path d="M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z"/>',
@@ -1444,7 +1472,7 @@
     };
     const svg = (name) => '<svg class="ico" viewBox="0 0 24 24">' + (ICONS[name] || ICONS.info) + '</svg>';
 
-    /* ------------------------------ state ------------------------------ */
+    /* ------------------------------ constants ------------------------------ */
     const ACCENTS = {
       teal: { label: 'Teal (default)', c: '#00ff80' },
       orange: { label: 'Orange', c: '#ff6a3d' },
@@ -1473,23 +1501,14 @@
     const TIMEZONES = ['Pacific/Honolulu', 'America/Juneau', 'America/Los_Angeles', 'America/Phoenix', 'America/Denver', 'America/Lima', 'America/Chicago', 'America/Bogota', 'America/New_York', 'America/Argentina/Buenos_Aires', 'America/Santiago', 'America/Sao_Paulo', 'America/Halifax', 'America/St_Johns', 'GMT', 'Europe/Lisbon', 'Europe/London', 'Europe/Paris', 'Europe/Athens', 'Europe/Istanbul', 'Europe/Moscow', 'Africa/Lagos', 'Africa/Harare', 'Africa/Addis_Ababa', 'Asia/Dubai', 'Asia/Tehran', 'Asia/Karachi', 'Asia/Kolkata', 'Asia/Dhaka', 'Asia/Bangkok', 'Asia/Jakarta', 'Asia/Hong_Kong', 'Asia/Singapore', 'Asia/Manila', 'Asia/Seoul', 'Asia/Tokyo', 'Australia/Perth', 'Australia/Darwin', 'Australia/Adelaide', 'Australia/Brisbane', 'Australia/Sydney', 'Australia/Auckland'];
     const SYSTEM_INTENTS = ["intent_greeting_hello", "intent_names_ask", "intent_imperative_eyecolor", "intent_character_age", "intent_explore_start", "intent_system_charger", "intent_system_sleep", "intent_greeting_goodmorning", "intent_greeting_goodnight", "intent_greeting_goodbye", "intent_seasonal_happynewyear", "intent_seasonal_happyholidays", "intent_amazon_signin", "intent_imperative_forward", "intent_imperative_turnaround", "intent_imperative_turnleft", "intent_imperative_turnright", "intent_play_rollcube", "intent_play_popawheelie", "intent_play_fistbump", "intent_play_blackjack", "intent_imperative_affirmative", "intent_imperative_negative", "intent_photo_take_extend", "intent_imperative_praise", "intent_imperative_abuse", "intent_weather_extend", "intent_imperative_apologize", "intent_imperative_backup", "intent_imperative_volumedown", "intent_imperative_volumeup", "intent_imperative_lookatme", "intent_imperative_volumelevel_extend", "intent_imperative_shutup", "intent_names_username_extend", "intent_imperative_come", "intent_imperative_love", "intent_knowledge_promptquestion", "intent_clock_checktimer", "intent_global_stop_extend", "intent_clock_settimer_extend", "intent_clock_time", "intent_imperative_quiet", "intent_imperative_dance", "intent_play_pickupcube", "intent_imperative_fetchcube", "intent_imperative_findcube", "intent_play_anytrick", "intent_message_recordmessage_extend", "intent_message_playmessage_extend", "intent_blackjack_hit", "intent_blackjack_stand", "intent_play_keepaway"];
 
+    /* ------------------------------ state ------------------------------ */
     const state = {
       startedAt: Date.now(),
-      initial: { pastSetup: true, step: 1, conn: 'ep', port: '443', running: false },
-      robots: [
-        { esn: '00603f9b', ip: '10.42.0.248', battery: 92, volts: 4.06, charging: true, sec: 421 },
-        { esn: '004047ef', ip: '10.42.0.175', battery: 34, volts: 3.72, charging: false, sec: null }
-      ],
-      activeRobot: 0,
-      intents: [
-        { id: 1, name: 'Turn on the lights', description: 'Runs a script that switches the room lights on', utterances: ['turn on the lights', 'lights on'], intent: 'intent_imperative_dance', params: { paramname: '', paramvalue: '' }, exec: '/usr/local/bin/lights.sh', execargs: ['on'], luascript: '' },
-        { id: 2, name: 'Good night routine', description: 'Puts Vector to sleep and turns everything off', utterances: ['good night routine', 'bed time'], intent: 'intent_system_sleep', params: { paramname: 'state', paramvalue: 'sleep' }, exec: '', execargs: [], luascript: '-- lua placeholder' }
-      ],
-      logs: [],
-      logAll: false,
-      logPaused: false,
-      logTimer: null,
-      logCount: 0,
+      backendOk: null,
+      config: { pastinitialsetup: true },
+      robots: [],
+      activeRobot: -1,
+      intents: [],
       weather: { provider: '', key: '' },
       kg: {
         provider: '', intentgraph: false, saveChat: false, commandsEnable: false, voiceEnglish: false, saveChatNum: 0,
@@ -1498,48 +1517,139 @@
         together: { model: '', key: '', prompt: '' },
         custom: { key: '', endpoint: '', model: '', prompt: '' }
       },
-      stt: { provider: 'vosk', language: 'en-US' },
+      stt: { provider: '', language: 'en-US' },
       ui: { accent: 'teal', font: 'droidsans' },
       sdk: {
         volume: 3, eyeColor: 0, customEye: null, locale: 'en-US', time24: false,
-        fahrenheit: true, button: 0, location: 'San Francisco, California',
-        timezone: 'America/Los_Angeles', alexa: false, mirror: false, assume: false,
-        keyControl: false, control: 'release'
+        fahrenheit: true, button: 0, location: '', timezone: '', alexa: false,
+        assume: false, keyControl: false, mirror: false
       },
-      faces: [{ id: 'f1', name: 'Alice' }, { id: 'f2', name: 'Bob' }],
-      photos: [
-        { id: 'p1', label: 'IMG_0001', hue: 160 },
-        { id: 'p2', label: 'IMG_0002', hue: 205 },
-        { id: 'p3', label: 'IMG_0003', hue: 285 },
-        { id: 'p4', label: 'IMG_0004', hue: 25 }
-      ],
+      logsText: '',
+      logPaused: false,
+      logLines: 0,
+      photos: [],
+      faces: [],
       stim: { running: false, timer: null, data: [] },
-      cam: { running: false, raf: null }
+      cam: { img: null },
+      initial: { step: 1, running: false }
     };
 
-    let editingIntentId = null;
-
-    /* ------------------------------ toasts ------------------------------ */
-    function toast(message, type) {
-      const el = document.createElement('div');
-      el.className = 'toast' + (type ? ' ' + type : '');
-      el.innerHTML = svg(type === 'err' ? 'x' : type === 'warn' ? 'info' : 'check') + '<div>' + esc(message) + '</div>';
-      $('toasts').appendChild(el);
-      setTimeout(() => { el.style.opacity = '0'; el.style.transform = 'translateX(16px)'; el.style.transition = 'all .25s'; }, 3200);
-      setTimeout(() => el.remove(), 3600);
-    }
-    function setStatus(id, message, kind) {
-      const el = $(id);
+    /* ------------------------------ backend access ------------------------------ */
+    function setBackendBadge(ok) {
+      const el = $('backendBadge');
       if (!el) return;
-      el.className = 'status' + (kind ? ' ' + kind : '');
-      el.textContent = message || '';
+      state.backendOk = ok;
+      if (ok === true) { el.className = 'badge accent dot hide-sm'; el.textContent = 'backend online'; }
+      else if (ok === false) { el.className = 'badge hide-sm'; el.textContent = 'backend offline'; }
+      else { el.className = 'badge hide-sm'; el.textContent = 'checking backend…'; }
     }
-    function log(level, message) {
-      state.logs.push({ t: nowTime(), level: level, msg: message });
-      if (state.logs.length > 400) state.logs.shift();
-      state.logCount++;
-      if ($('section-log').classList.contains('active') && !state.logPaused) renderLog();
-      $('homeLogs').textContent = String(state.logCount);
+    function backendDown() {
+      if (state.backendOk !== false) {
+        setBackendBadge(false);
+        toast('Cannot reach the wire-pod backend. Serve this page from wire-pod (port 8080) to load and save data.', 'err');
+      }
+    }
+    async function apiFetch(url, opts) {
+      try {
+        const r = await fetch(url, opts);
+        if (r.ok || r.status < 500) setBackendBadge(true);
+        return r;
+      } catch (e) {
+        backendDown();
+        throw e;
+      }
+    }
+    async function apiText(url, opts) {
+      try {
+        const r = await apiFetch(url, opts);
+        return await r.text();
+      } catch (e) {
+        return 'error: wire-pod backend unreachable';
+      }
+    }
+    async function apiJSON(url, opts) {
+      try {
+        const r = await apiFetch(url, opts);
+        return await r.json();
+      } catch (e) {
+        return null;
+      }
+    }
+    function activeEsn() {
+      const r = state.robots[state.activeRobot];
+      return r ? r.esn : '';
+    }
+    function sdkUrl(path) {
+      return path + (path.includes('?') ? '&' : '?') + 'serial=' + encodeURIComponent(activeEsn());
+    }
+    /* Same contract as the old sdkapp sendForm(): POST, then refresh settings. */
+    async function sendForm(path, then) {
+      if (!state.robots.length || state.activeRobot < 0) { toast('No robot connected yet.', 'warn'); return ''; }
+      try {
+        const r = await apiFetch(sdkUrl(path), { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' } });
+        const t = await r.text();
+        if (then) then(t); else getCurrentSettings();
+        return t;
+      } catch (e) { return ''; }
+    }
+    async function getSDKInfo() {
+      try {
+        const r = await apiFetch('/api-sdk/get_sdk_info');
+        if (!r.ok) return undefined;
+        return await r.json();
+      } catch (e) { return undefined; }
+    }
+    async function getBatteryStatus(serial) {
+      try {
+        const r = await apiFetch('/api-sdk/get_battery?serial=' + encodeURIComponent(serial), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          signal: (typeof AbortSignal !== 'undefined' && AbortSignal.timeout) ? AbortSignal.timeout(15000) : undefined
+        });
+        if (!r.ok) return undefined;
+        return await r.json();
+      } catch (e) { return undefined; }
+    }
+
+    /* ------------------------------ theming (js/ui.js parity) ------------------------------ */
+    function hexToRgb(hex) {
+      const h = hex.replace('#', '');
+      const n = parseInt(h.length === 3 ? h.split('').map((c) => c + c).join('') : h, 16);
+      return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+    }
+    function applyAccent(key) {
+      const c = (ACCENTS[key] || ACCENTS.teal).c;
+      const rgb = hexToRgb(c);
+      document.documentElement.style.setProperty('--accent', c);
+      document.documentElement.style.setProperty('--accent-soft', 'rgba(' + rgb.join(',') + ',.12)');
+      document.documentElement.style.setProperty('--accent-line', 'rgba(' + rgb.join(',') + ',.45)');
+    }
+    function loadSettings() {
+      /* same keys as the original js/ui.js loadSettings() */
+      try {
+        const savedColor = localStorage.getItem('accentColor');
+        const savedFont = localStorage.getItem('bodyFont');
+        if (savedColor && ACCENTS[savedColor]) state.ui.accent = savedColor;
+        if (savedFont && FONTS[savedFont]) state.ui.font = savedFont;
+      } catch (e) { /* storage unavailable - defaults are fine */ }
+      applyAccent(state.ui.accent);
+      document.documentElement.style.setProperty('--body-font', FONTS[state.ui.font].stack);
+      $('accent-color-choose').value = state.ui.accent;
+      $('body-font-choose').value = state.ui.font;
+    }
+    function setUIColor(key) {
+      state.ui.accent = key;
+      applyAccent(key);
+      try { localStorage.setItem('accentColor', key); } catch (e) { /* ignore */ }
+      $('accent-color-choose').value = key;
+      toast('Accent color set to ' + ACCENTS[key].label + ' (saved in this browser)');
+    }
+    function setUIFont(key) {
+      state.ui.font = key;
+      document.documentElement.style.setProperty('--body-font', FONTS[key].stack);
+      try { localStorage.setItem('bodyFont', key); } catch (e) { /* ignore */ }
+      $('body-font-choose').value = key;
+      toast('Body font set to ' + FONTS[key].label + ' (saved in this browser)');
     }
 
     /* ------------------------------ navigation ------------------------------ */
@@ -1553,8 +1663,8 @@
         group: 'Robot', items: [
           { id: 'home', label: 'Dashboard', icon: 'grid', desc: 'Overview of wire-pod, connected robots and quick links to every page.' },
           { id: 'botauth', label: 'Bot Setup', icon: 'robot', desc: 'Pair and authenticate a Vector over Bluetooth, plus OSKR / dev bot setup.' },
-          { id: 'intents', label: 'Custom Intents', icon: 'mic', desc: 'Add, edit and delete custom intents stored for your robot.' },
-          { id: 'log', label: 'Log', icon: 'terminal', desc: 'Live server log stream with debug filtering.' },
+          { id: 'intents', label: 'Custom Intents', icon: 'mic', desc: 'Add, edit and delete custom intents stored on the wire-pod server.' },
+          { id: 'log', label: 'Log', icon: 'terminal', desc: 'Live server log stream from wire-pod.' },
           { id: 'version', label: 'Version Info', icon: 'tag', desc: 'Installed version, base commit and update check.' },
           { id: 'uicustomizer', label: 'UI Settings', icon: 'sliders', desc: 'Accent color and body font for this control panel.' }
         ]
@@ -1610,15 +1720,18 @@
       closeDrawer();
       window.scrollTo({ top: 0, behavior: 'smooth' });
 
-      if (id !== 'log') stopLogTicker();
+      if (id !== 'log') stopLogPolling();
       if (id !== 'stim') stopStim();
 
-      if (id === 'log') { startLogTicker(); renderLog(); }
+      if (id === 'log') startLogPolling();
       if (id === 'botauth' && !$('botAuth').dataset.started) { $('botAuth').dataset.started = '1'; checkBLECapability(); }
       if (id === 'stim') startStim();
       if (id === 'version') checkUpdate();
-      if (id === 'stats') updateStats(false);
+      if (id === 'stats') updateStats();
+      if (id === 'photos') getPhotos();
+      if (id === 'face') refreshFaceList();
       if (id === 'home') renderHome();
+      if (id === 'initial') renderInitialState();
     }
 
     function toggleDrawer() {
@@ -1630,98 +1743,57 @@
       $('scrim').classList.remove('show');
     }
 
-    /* ------------------------------ theming ------------------------------ */
-    function hexToRgb(hex) {
-      const h = hex.replace('#', '');
-      const n = parseInt(h.length === 3 ? h.split('').map((c) => c + c).join('') : h, 16);
-      return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
-    }
-    function applyUI() {
-      const accent = ACCENTS[state.ui.accent] || ACCENTS.teal;
-      const rgb = hexToRgb(accent.c);
-      document.documentElement.style.setProperty('--accent', accent.c);
-      document.documentElement.style.setProperty('--accent-soft', 'rgba(' + rgb.join(',') + ',.12)');
-      document.documentElement.style.setProperty('--accent-line', 'rgba(' + rgb.join(',') + ',.45)');
-      document.documentElement.style.setProperty('--body-font', FONTS[state.ui.font].stack);
-      $('accent-color-choose').value = state.ui.accent;
-      $('body-font-choose').value = state.ui.font;
-    }
-    function setUIColor(key) { state.ui.accent = key; applyUI(); toast('Accent color set to ' + ACCENTS[key].label + ' (not saved)'); }
-    function setUIFont(key) { state.ui.font = key; applyUI(); toast('Body font set to ' + FONTS[key].label + ' (not saved)'); }
+    /* ------------------------------ boot / config gate ------------------------------ */
+    async function checkInited() {
+      /* same checks as the original index.html checkInited() */
+      try {
+        const r = await apiFetch('/api/is_api_v3');
+        setBackendBadge(r.ok);
+        if (!r.ok) {
+          alert('This webroot does not match with the wire-pod binary. Some functionality will be broken. There was either an error during the last update, or you did not precisely follow the update guide. https://github.com/kercre123/wire-pod/wiki/Things-to-Know#updating-wire-pod');
+        }
+      } catch (e) { setBackendBadge(false); }
 
-    /* ------------------------------ home / robots ------------------------------ */
-    function batteryFaceSvg() {
-      return '<div class="eyes"><i></i><i></i></div><div class="mouth"></div>';
+      const config = await apiJSON('/api/get_config');
+      if (config && typeof config === 'object') state.config = config;
+      renderHome();
+      renderInitialState();
+
+      if (state.config && !state.config.pastinitialsetup) {
+        /* the original redirected to /initial.html - the wizard is built in now */
+        showSection('initial');
+      }
+      loadRobots();
+      refreshIntents();
+      updateWeatherAPI();
+      updateKGAPI();
+      checkLanguage();
     }
-    function renderBots() {
-      $('botStats').innerHTML = state.robots.map((r, i) => {
-        const cls = r.battery < 20 ? 'low' : r.battery < 50 ? 'mid' : '';
-        return '<div class="bot-card' + (i === state.activeRobot ? ' selected' : '') + '" onclick="openRobot(' + i + ')" title="' + esc(r.esn) + ' · ' + r.battery + '% · ' + r.volts.toFixed(2) + 'V">' +
-          '<div class="bot-face">' + batteryFaceSvg() + '</div>' +
-          '<div class="bot-meta"><b>' + esc(r.esn) + '</b><small>' + esc(r.ip) + '</small><small>~' + r.battery + '% · ' + r.volts.toFixed(2) + 'V</small></div>' +
-          '<div class="battery-outline' + (r.charging ? ' charging' : '') + '"><div class="battery-fill ' + cls + '" style="width:' + r.battery + '%"></div><div class="battery-bolt">' + svg('bolt') + '</div></div>' +
-          '</div>';
-      }).join('');
-      $('robotSelect').innerHTML = state.robots.map((r, i) => '<option value="' + i + '"' + (i === state.activeRobot ? ' selected' : '') + '>' + esc(r.esn) + '</option>').join('');
-      const active = state.robots[state.activeRobot];
-      $('homeSerial').textContent = active.esn;
-      $('homeBattery').textContent = active.battery + '%';
-      $('homeCharger').textContent = active.charging ? 'on platform' + (active.sec ? ' · ~' + active.sec + 's left' : '') : 'off platform';
-    }
-    function renderHome() {
-      renderHomeBanner();
-      $('homeUptime').textContent = formatUptime(Date.now() - state.startedAt);
-      $('homeIntents').textContent = String(state.intents.length);
-      $('homeLogs').textContent = String(state.logCount);
-      const tiles = [
-        ['botauth', 'robot', 'Bot Setup', 'pair over BLE'],
-        ['intents', 'mic', 'Custom Intents', state.intents.length + ' saved'],
-        ['control', 'gamepad', 'Control', 'camera · motors'],
-        ['volume', 'volume', VOLUMES[state.sdk.volume]],
-        ['eyes', 'eye', 'Eye Color', EYE_COLORS[state.sdk.eyeColor].name],
-        ['actions', 'run', 'Actions', 'quick commands'],
-        ['photos', 'images', 'Photos', state.photos.length + ' photos'],
-        ['stats', 'chart', 'Statistics', 'robot stats'],
-        ['weather', 'cloud-sun', 'Weather', state.weather.provider || 'not set'],
-        ['kg', 'graph', 'Knowledge Graph', state.kg.provider || 'not set'],
-        ['language', 'globe', 'STT Language', state.stt.language],
-        ['log', 'terminal', 'Log', state.logCount + ' lines']
-      ];
-      $('homeTiles').innerHTML = tiles.map((t) =>
-        '<div class="tile" onclick="showSection(\'' + t[0] + '\')">' + svg(t[1]) + '<b>' + esc(t[2]) + '</b><small>' + esc(t[3]) + '</small></div>'
-      ).join('');
-    }
-    function formatUptime(ms) {
-      const s = Math.floor(ms / 1000), h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60);
-      return h + 'h ' + String(m).padStart(2, '0') + 'm ' + String(s % 60).padStart(2, '0') + 's';
-    }
-    function selectRobot(i) {
-      state.activeRobot = Number(i);
-      renderBots();
-      log('INFO', 'sdk: switched active robot to ' + state.robots[state.activeRobot].esn);
-      renderSettingsReadouts();
-    }
-    function openRobot(i) {
-      selectRobot(i);
-      showSection('volume');
+
+    async function boot() {
+      $('accent-color-choose').innerHTML = Object.keys(ACCENTS).map((k) => '<option value="' + k + '">' + ACCENTS[k].label + '</option>').join('');
+      $('body-font-choose').innerHTML = Object.keys(FONTS).map((k) => '<option value="' + k + '">' + FONTS[k].label + '</option>').join('');
+      loadSettings();
+      renderNav();
+      buildSdkControls();
+      createIntentSelect('intentAddSelect');
+      document.addEventListener('keydown', (e) => {
+        const k = e.key.toLowerCase();
+        if (k in keysPressed) { keysPressed[k] = true; sendControlRequests(); }
+      });
+      document.addEventListener('keyup', (e) => {
+        const k = e.key.toLowerCase();
+        if (k in keysPressed) { keysPressed[k] = false; sendControlRequests(); }
+      });
+      $('textSay').addEventListener('focus', () => { $('key_control_off').checked = true; state.sdk.keyControl = false; });
+      $('fileInput').addEventListener('change', loadAudio);
+      $('uploadButton').addEventListener('click', uploadAudio);
+      showSection('home');
+      startClock();
+      checkInited();
     }
 
     /* ------------------------------ custom intents ------------------------------ */
-    function renderIntentList() {
-      $('intentCount').textContent = state.intents.length + ' custom intent' + (state.intents.length === 1 ? '' : 's');
-      if (!state.intents.length) {
-        $('intentList').innerHTML = '<div class="note">' + svg('info') + '<div>No custom intents yet. Add one above and it will show up here.</div></div>';
-        return;
-      }
-      $('intentList').innerHTML = state.intents.map((it) =>
-        '<div class="intent-item">' +
-        '<div class="grow"><b>' + esc(it.name) + '</b><small>' + esc(it.description || '') + '</small><small style="color:var(--muted-2)">' + esc(it.utterances.join(', ')) + '</small></div>' +
-        '<span class="tag">' + esc(it.intent) + '</span>' +
-        '<button class="btn sm" onclick="editFormCreate(' + it.id + ')">' + svg('edit') + 'Edit</button>' +
-        '<button class="btn sm danger" onclick="deleteSelectedIntent(' + it.id + ')">' + svg('trash') + 'Delete</button>' +
-        '</div>'
-      ).join('');
-    }
     function createIntentSelect(elementId) {
       const host = $(elementId);
       if (!host) return;
@@ -1734,164 +1806,227 @@
       host.innerHTML = '';
       host.appendChild(select);
     }
-    function sendIntentAdd() {
-      const name = $('nameAdd').value.trim();
-      const description = $('descriptionAdd').value.trim();
-      const utterances = $('utterancesAdd').value.split(',').map((s) => s.trim()).filter(Boolean);
-      if (!name || !description || !utterances.length) {
-        setStatus('addIntentStatus', 'A required input is missing. You need a name, description and utterances.', 'err');
-        toast('Missing name, description or utterances', 'err');
+    async function refreshIntents() {
+      const list = await apiJSON('/api/get_custom_intents_json');
+      state.intents = Array.isArray(list) ? list : [];
+      renderIntentList();
+      renderHome();
+    }
+    function renderIntentList() {
+      const list = state.intents;
+      $('intentCount').textContent = list.length + ' custom intent' + (list.length === 1 ? '' : 's') + ' stored on the server';
+      if (!list.length) {
+        $('intentList').innerHTML = '<div class="note">' + svg('info') + '<div>No custom intents found. Add one above and it will be saved to the server (customIntents.json).</div></div>';
         return;
       }
-      state.intents.push({
-        id: Date.now(),
-        name, description, utterances,
+      $('intentList').innerHTML = list.map((it, idx) =>
+        '<div class="intent-item">' +
+        '<div class="grow"><b>' + esc(it.name || '') + '</b><small>' + esc(it.description || '') + '</small><small style="color:var(--muted-2)">' + esc((it.utterances || []).join(', ')) + '</small></div>' +
+        (it.issystem ? '<span class="tag">system</span>' : '<span class="tag">' + esc(it.intent || '') + '</span>') +
+        '<button class="btn sm" onclick="editFormCreate(' + idx + ')">' + svg('edit') + 'Edit</button>' +
+        '<button class="btn sm danger" onclick="deleteSelectedIntent(' + idx + ')">' + svg('trash') + 'Delete</button>' +
+        '</div>'
+      ).join('');
+    }
+    function intentDataFromForm(prefix) {
+      return {
+        name: $(prefix + 'Name').value,
+        description: $(prefix + 'Description').value,
+        utterances: $(prefix + 'Utterances').value.split(','),
+        intent: $(prefix === 'edit' ? 'editIntentSel' : 'intentAddSelectintents').value,
+        params: { paramname: $(prefix + 'ParamName').value, paramvalue: $(prefix + 'ParamValue').value },
+        exec: $(prefix + 'Exec').value,
+        execargs: $(prefix + 'ExecArgs').value.split(','),
+        luascript: $(prefix + 'Lua').value
+      };
+    }
+    async function sendIntentAdd() {
+      const name = $('nameAdd').value.trim();
+      const utterances = $('utterancesAdd').value.split(',').map((s) => s.trim()).filter(Boolean);
+      if (!name || !$('descriptionAdd').value.trim() || !utterances.length) {
+        const msg = 'A required input is missing. You need a name, description, and utterances.';
+        setStatus('addIntentStatus', msg, 'err');
+        toast(msg, 'err');
+        return;
+      }
+      setStatus('addIntentStatus', 'Adding...', 'warn');
+      const data = {
+        name: name,
+        description: $('descriptionAdd').value,
+        utterances: $('utterancesAdd').value.split(','),
         intent: $('intentAddSelectintents').value,
         params: { paramname: $('paramnameAdd').value, paramvalue: $('paramvalueAdd').value },
         exec: $('execAdd').value,
-        execargs: $('execAddArgs').value.split(',').map((s) => s.trim()).filter(Boolean),
+        execargs: $('execAddArgs').value.split(','),
         luascript: $('luaAdd').value
+      };
+      const resp = await apiText('/api/add_custom_intent', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data)
       });
-      setStatus('addIntentStatus', 'Added "' + name + '" (demo only, not written to disk).', 'ok');
-      toast('Custom intent "' + name + '" added');
-      log('INFO', 'intents: added custom intent "' + name + '"');
-      $('nameAdd').value = ''; $('descriptionAdd').value = ''; $('utterancesAdd').value = '';
-      $('paramnameAdd').value = ''; $('paramvalueAdd').value = ''; $('execAdd').value = ''; $('execAddArgs').value = ''; $('luaAdd').value = '';
-      renderIntentList(); renderHome();
+      setStatus('addIntentStatus', resp || 'Added.', resp.includes('rror') ? 'err' : 'ok');
+      toast(resp || 'Custom intent added');
+      if (!resp.includes('rror')) {
+        $('nameAdd').value = ''; $('descriptionAdd').value = ''; $('utterancesAdd').value = '';
+        $('paramnameAdd').value = ''; $('paramvalueAdd').value = ''; $('execAdd').value = '';
+        $('execAddArgs').value = ''; $('luaAdd').value = '';
+      }
+      refreshIntents();
     }
-    function editFormCreate(id) {
-      const it = state.intents.find((x) => x.id === id);
-      if (!it) return;
-      editingIntentId = id;
+    let editingIntentIndex = -1;
+    function editFormCreate(idx) {
+      const intent = state.intents[idx];
+      if (!intent) {
+        $('editIntentForm').innerHTML = '';
+        setStatus('editIntentStatus', 'No intents found, you must add one first', 'err');
+        return;
+      }
+      editingIntentIndex = idx;
       $('editIntentForm').innerHTML =
-        '<hr class="hr" /><h3>Editing: ' + esc(it.name) + '</h3>' +
+        '<hr class="hr" /><h3>Editing: ' + esc(intent.name) + '</h3>' +
         '<div class="grid c2" style="margin-top:10px">' +
-        '<div class="field"><label for="editName">Name</label><input type="text" id="editName" value="' + esc(it.name) + '"></div>' +
-        '<div class="field"><label for="editDescription">Description</label><input type="text" id="editDescription" value="' + esc(it.description) + '"></div>' +
+        '<div class="field"><label for="editName">Name</label><input type="text" id="editName" value="' + esc(intent.name) + '"></div>' +
+        '<div class="field"><label for="editDescription">Description</label><input type="text" id="editDescription" value="' + esc(intent.description) + '"></div>' +
         '</div>' +
-        '<div class="field"><label for="editUtterances">Utterances (comma separated)</label><input type="text" id="editUtterances" value="' + esc(it.utterances.join(',')) + '"></div>' +
+        '<div class="field"><label for="editUtterances">Utterances (comma separated)</label><input type="text" id="editUtterances" value="' + esc((intent.utterances || []).join(',')) + '"></div>' +
         '<div class="field"><label for="editIntentSel">Intent</label><select id="editIntentSel">' +
-        SYSTEM_INTENTS.map((n) => '<option value="' + n + '"' + (n === it.intent ? ' selected' : '') + '>' + n + '</option>').join('') +
+        SYSTEM_INTENTS.map((n) => '<option value="' + n + '"' + (n === intent.intent ? ' selected' : '') + '>' + esc(n) + '</option>').join('') +
         '</select></div>' +
         '<div class="grid c2">' +
-        '<div class="field"><label for="editParamName">Param name</label><input type="text" id="editParamName" value="' + esc(it.params.paramname) + '"></div>' +
-        '<div class="field"><label for="editParamValue">Param value</label><input type="text" id="editParamValue" value="' + esc(it.params.paramvalue) + '"></div>' +
+        '<div class="field"><label for="editParamName">Param name</label><input type="text" id="editParamName" value="' + esc(intent.params.paramname) + '"></div>' +
+        '<div class="field"><label for="editParamValue">Param value</label><input type="text" id="editParamValue" value="' + esc(intent.params.paramvalue) + '"></div>' +
         '</div>' +
-        '<div class="field"><label for="editExec">Exec</label><input type="text" id="editExec" value="' + esc(it.exec) + '"></div>' +
-        '<div class="field"><label for="editExecArgs">Exec args (comma separated)</label><input type="text" id="editExecArgs" value="' + esc(it.execargs.join(',')) + '"></div>' +
-        '<div class="field"><label for="editLua">Lua code</label><textarea id="editLua">' + esc(it.luascript) + '</textarea></div>' +
+        '<div class="field"><label for="editExec">Exec</label><input type="text" id="editExec" value="' + esc(intent.exec) + '"></div>' +
+        '<div class="field"><label for="editExecArgs">Exec args (comma separated)</label><input type="text" id="editExecArgs" value="' + esc((intent.execargs || []).join(',')) + '"></div>' +
+        '<div class="field"><label for="editLua">Lua code</label><textarea id="editLua">' + esc(intent.luascript) + '</textarea></div>' +
         '<div class="row"><button class="btn primary" onclick="editIntent()">Submit</button>' +
         '<button class="btn ghost" onclick="hideEditIntents()">Cancel</button></div>';
       setStatus('editIntentStatus', '');
     }
-    function editIntent() {
-      const it = state.intents.find((x) => x.id === editingIntentId);
-      if (!it) return;
-      it.name = $('editName').value;
-      it.description = $('editDescription').value;
-      it.utterances = $('editUtterances').value.split(',').map((s) => s.trim()).filter(Boolean);
-      it.intent = $('editIntentSel').value;
-      it.params = { paramname: $('editParamName').value, paramvalue: $('editParamValue').value };
-      it.exec = $('editExec').value;
-      it.execargs = $('editExecArgs').value.split(',').map((s) => s.trim()).filter(Boolean);
-      it.luascript = $('editLua').value;
-      setStatus('editIntentStatus', 'Updated "' + it.name + '" (demo only).', 'ok');
-      toast('Intent updated');
-      log('INFO', 'intents: edited custom intent "' + it.name + '"');
+    async function editIntent() {
+      if (editingIntentIndex < 0) return;
+      const data = intentDataFromForm('edit');
+      data.number = editingIntentIndex + 1;
+      const resp = await apiText('/api/edit_custom_intent', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data)
+      });
+      setStatus('editIntentStatus', resp || 'Updated.', resp.includes('rror') ? 'err' : 'ok');
+      toast(resp || 'Intent updated');
       hideEditIntents();
-      renderIntentList();
+      refreshIntents();
     }
     function hideEditIntents() {
       $('editIntentForm').innerHTML = '';
       setStatus('editIntentStatus', '');
     }
-    function deleteSelectedIntent(id) {
-      const it = state.intents.find((x) => x.id === id);
-      if (!it) return;
-      state.intents = state.intents.filter((x) => x.id !== id);
-      if (editingIntentId === id) hideEditIntents();
-      setStatus('editIntentStatus', '"' + it.name + '" removed (demo only).', 'ok');
-      toast('Intent deleted');
-      log('INFO', 'intents: removed custom intent "' + it.name + '"');
-      renderIntentList(); renderHome();
+    async function deleteSelectedIntent(idx) {
+      const resp = await apiText('/api/remove_custom_intent', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ number: idx + 1 })
+      });
+      setStatus('editIntentStatus', resp || 'Removed.', resp.includes('rror') ? 'err' : 'ok');
+      toast(resp || 'Intent deleted');
+      hideEditIntents();
+      refreshIntents();
     }
 
     /* ------------------------------ log ------------------------------ */
-    const LOG_TEMPLATES = [
-      ['INFO', 'wire-pod: waiting for robot connection'],
-      ['INFO', 'intent matched: intent_imperative_dance'],
-      ['INFO', 'tts: streaming audio to robot'],
-      ['INFO', 'stt: "hey vector" detected (confidence 0.93)'],
-      ['DEBUG', 'ble: advertising packet received'],
-      ['INFO', 'weather: provider lookup for San Francisco'],
-      ['INFO', 'kg: request completed in 812ms'],
-      ['DEBUG', 'sdk: heartbeat ok'],
-      ['WARN', 'battery low on 004047ef (34%)'],
-      ['INFO', 'camera: frame stream requested'],
-      ['DEBUG', 'ep: handler routed /api-sdk/get_sdk_settings'],
-      ['INFO', 'onboarding: wake word acknowledged']
-    ];
-    function renderLog() {
-      const all = $('logdebug').checked;
-      const lines = state.logs.filter((l) => all || l.level !== 'DEBUG');
-      $('logArea').innerHTML = lines.length
-        ? lines.map((l) => '<div class="log-line"><span class="t">[' + l.t + ']</span> <span class="lvl-' + l.level.toLowerCase() + '">' + l.level + '</span> <span class="msg">' + esc(l.msg) + '</span></div>').join('')
-        : '<div style="color:var(--muted-2)">No logs yet. Interact with the UI or wait - new lines arrive automatically.</div>';
+    let logTimer = null;
+    function renderLogText(text) {
+      state.logsText = text || '';
+      state.logLines = state.logsText ? state.logsText.split('\n').length : 0;
+      $('logArea').textContent = state.logsText || 'No logs yet, you must say a command to Vector. (this updates automatically)';
       if ($('logscrollbottom').checked) $('logArea').scrollTop = $('logArea').scrollHeight;
+      $('logState').textContent = state.logPaused ? 'paused' : 'streaming';
+      renderHome();
     }
-    function startLogTicker() {
-      if (state.logTimer) return;
-      state.logTimer = setInterval(() => {
-        if (state.logPaused) return;
-        const t = LOG_TEMPLATES[Math.floor(Math.random() * LOG_TEMPLATES.length)];
-        let msg = t[1];
-        if (Math.random() < .35) msg += ' (' + state.robots[state.activeRobot].esn + ')';
-        log(t[0], msg);
-      }, 1400);
-      $('logState').textContent = 'streaming';
+    async function pollLog() {
+      if (!$('section-log').classList.contains('active') || state.logPaused) return;
+      const url = $('logdebug').checked ? '/api/get_debug_logs' : '/api/get_logs';
+      renderLogText(await apiText(url));
     }
-    function stopLogTicker() {
-      if (state.logTimer) { clearInterval(state.logTimer); state.logTimer = null; }
-      $('logState').textContent = 'paused';
+    function startLogPolling() {
+      /* original cadence: poll every 500 ms while the section is visible */
+      if (logTimer) return;
+      pollLog();
+      logTimer = setInterval(pollLog, 500);
+    }
+    function stopLogPolling() {
+      if (logTimer) { clearInterval(logTimer); logTimer = null; }
     }
     function toggleLogPause() {
       state.logPaused = !state.logPaused;
       $('logPauseBtn').innerHTML = svg(state.logPaused ? 'play' : 'stop') + (state.logPaused ? 'Resume' : 'Pause');
       $('logState').textContent = state.logPaused ? 'paused' : 'streaming';
-      toast(state.logPaused ? 'Log stream paused' : 'Log stream resumed');
     }
-    function clearLog() { state.logs = []; renderLog(); toast('Log cleared'); }
+    function clearLog() {
+      $('logArea').textContent = '';
+      state.logsText = '';
+      toast('Log display cleared (the server log itself is untouched)');
+    }
 
     /* ------------------------------ version ------------------------------ */
-    function checkUpdate() {
-      $('installedVer').textContent = '2.0.1 (ep)';
-      $('installedCommit').textContent = 'dba3e22';
-      $('latestVer').textContent = 'checking...';
-      setStatus('updateStatus', 'Checking for updates...');
+    async function checkUpdate() {
+      setStatus('updateStatus', 'Checking for updates...', 'warn');
+      $('installedVer').textContent = 'checking...';
+      $('installedCommit').textContent = '';
+      $('latestVer').textContent = '';
       $('updateGuideLink').style.display = 'none';
-      setTimeout(() => {
-        $('latestVer').textContent = '2.0.1';
-        setStatus('updateStatus', 'You are on the latest version.', 'ok');
-        log('INFO', 'version: update check complete - up to date');
-      }, 900);
+      const resp = await apiText('/api/get_version_info');
+      if (resp.includes('error')) {
+        setStatus('updateStatus', 'There was an error: ' + resp, 'err');
+        $('installedVer').textContent = 'error';
+        return;
+      }
+      let parsed = null;
+      try { parsed = JSON.parse(resp); } catch (e) {
+        setStatus('updateStatus', 'There was an error: ' + resp, 'err');
+        return;
+      }
+      if (parsed.fromsource) {
+        $('installedVer').textContent = 'Installed Commit: ' + parsed.installedcommit;
+        if (parsed.avail) {
+          setStatus('updateStatus', 'A newer version of WirePod (commit: ' + parsed.currentcommit + ') is available! Use the guide below to update.', 'warn');
+          $('latestVer').textContent = parsed.currentcommit;
+          $('updateGuideLink').style.display = 'inline';
+        } else {
+          setStatus('updateStatus', 'You are on the latest version.', 'ok');
+          $('latestVer').textContent = 'up to date';
+        }
+      } else {
+        $('installedVer').textContent = 'Installed Version: ' + parsed.installedversion;
+        $('installedCommit').textContent = 'Based on wire-pod commit: ' + parsed.installedcommit;
+        if (parsed.avail) {
+          setStatus('updateStatus', 'A newer version of WirePod (' + parsed.currentversion + ') is available! Use the guide below to update.', 'warn');
+          $('latestVer').textContent = parsed.currentversion;
+          $('updateGuideLink').style.display = 'inline';
+        } else {
+          setStatus('updateStatus', 'You are on the latest version.', 'ok');
+          $('latestVer').textContent = parsed.currentversion || 'up to date';
+        }
+      }
     }
 
     /* ------------------------------ weather ------------------------------ */
     function checkWeather() {
       $('apiKeySpan').style.display = $('weatherProvider').value ? 'flex' : 'none';
     }
-    function sendWeatherAPIKey() {
-      state.weather.provider = $('weatherProvider').value;
-      state.weather.key = $('apiKey').value;
-      if (!state.weather.provider) {
-        setStatus('addWeatherProviderAPIStatus', 'Weather provider disabled (demo only).', 'warn');
-        toast('Weather provider cleared', 'warn');
-      } else {
-        setStatus('addWeatherProviderAPIStatus', 'Saved ' + state.weather.provider + ' provider (demo only, nothing persisted).', 'ok');
-        toast('Weather settings applied');
-        log('INFO', 'weather: provider set to ' + state.weather.provider);
-      }
+    async function updateWeatherAPI() {
+      const data = await apiJSON('/api/get_weather_api');
+      if (!data) return;
+      state.weather = { provider: data.provider || '', key: data.key || '' };
+      $('weatherProvider').value = state.weather.provider;
+      $('apiKey').value = state.weather.key;
+      checkWeather();
       renderHome();
+    }
+    async function sendWeatherAPIKey() {
+      setStatus('addWeatherProviderAPIStatus', 'Saving...', 'warn');
+      const resp = await apiText('/api/set_weather_api', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ provider: $('weatherProvider').value, key: $('apiKey').value })
+      });
+      setStatus('addWeatherProviderAPIStatus', resp || 'Saved.', resp.includes('rror') ? 'err' : 'ok');
+      toast(resp || 'Weather settings applied');
+      updateWeatherAPI();
     }
 
     /* ------------------------------ knowledge graph ------------------------------ */
@@ -1900,84 +2035,295 @@
       const provider = $('kgProvider').value;
       KG_IDS.forEach((id) => { $(id).style.display = 'none'; });
       if (!provider) return;
-      $('intentGraphInput').style.display = 'block';
-      if (provider === 'houndify') $('houndifyInput').style.display = 'block';
-      if (provider === 'openai') { $('openAIInput').style.display = 'block'; $('saveChatInput').style.display = 'block'; $('llmCommandInput').style.display = 'block'; $('openAIVoiceForEnglishInput').style.display = 'block'; }
-      if (provider === 'together') { $('togetherInput').style.display = 'block'; $('saveChatInput').style.display = 'block'; $('llmCommandInput').style.display = 'block'; }
-      if (provider === 'custom') { $('customAIInput').style.display = 'block'; $('saveChatInput').style.display = 'block'; $('llmCommandInput').style.display = 'block'; }
+      if (provider === 'houndify') { $('houndifyInput').style.display = 'block'; $('intentGraphInput').style.display = 'block'; }
+      else if (provider === 'openai') { $('intentGraphInput').style.display = 'block'; $('openAIInput').style.display = 'block'; $('saveChatInput').style.display = 'block'; $('llmCommandInput').style.display = 'block'; $('openAIVoiceForEnglishInput').style.display = 'block'; }
+      else if (provider === 'together') { $('intentGraphInput').style.display = 'block'; $('togetherInput').style.display = 'block'; $('saveChatInput').style.display = 'block'; $('llmCommandInput').style.display = 'block'; }
+      else if (provider === 'custom') { $('intentGraphInput').style.display = 'block'; $('customAIInput').style.display = 'block'; $('saveChatInput').style.display = 'block'; $('llmCommandInput').style.display = 'block'; }
     }
-    function sendKGAPIKey() {
-      const provider = $('kgProvider').value;
-      state.kg.provider = provider;
-      state.kg.intentgraph = $('intentyes') ? $('intentyes').checked : false;
-      state.kg.saveChat = $('saveChatYes') ? $('saveChatYes').checked : false;
-      state.kg.commandsEnable = $('commandYes') ? $('commandYes').checked : false;
-      state.kg.voiceEnglish = $('voiceEnglishYes') ? $('voiceEnglishYes').checked : false;
-      state.kg.saveChatNum = parseInt($('saveChatNum').value, 10) || 0;
-      if (provider === 'openai') Object.assign(state.kg.openai, { key: $('openaiKey').value, base: $('openaiBase').value, prompt: $('openAIPrompt').value, voice: $('openaiVoice').value });
-      if (provider === 'houndify') Object.assign(state.kg.houndify, { id: $('houndID').value, key: $('houndKey').value });
-      if (provider === 'together') Object.assign(state.kg.together, { model: $('togetherModel').value, key: $('togetherKey').value, prompt: $('togetherAIPrompt').value });
-      if (provider === 'custom') Object.assign(state.kg.custom, { key: $('customKey').value, endpoint: $('customAIEndpoint').value, model: $('customModel').value, prompt: $('customAIPrompt').value });
-      const label = provider ? provider : 'disabled';
-      setStatus('addKGProviderAPIStatus', 'Applied settings for ' + label + ' (demo only, nothing persisted).', 'ok');
-      toast('Knowledge graph settings applied');
-      log('INFO', 'kg: settings applied (provider=' + label + ')');
+    async function updateKGAPI() {
+      const data = await apiJSON('/api/get_kg_api');
+      if (!data) return;
+      state.kg.provider = data.provider || '';
+      $('kgProvider').value = state.kg.provider;
+      $('intentyes').checked = !!data.intentgraph;
+      $('saveChatYes').checked = !!data.save_chat;
+      $('commandYes').checked = !!data.commands_enable;
+      $('voiceEnglishYes').checked = !!data.openai_voice_with_english;
+      $('saveChatNum').value = data.save_chat_num || 0;
+      if (data.provider === 'openai') {
+        $('openaiKey').value = data.key || '';
+        $('openaiBase').value = data.openai_base || '';
+        $('openAIPrompt').value = data.openai_prompt || '';
+        $('openaiVoice').value = data.openai_voice || 'fable';
+      } else if (data.provider === 'together') {
+        $('togetherKey').value = data.key || '';
+        $('togetherModel').value = data.model || '';
+        $('togetherAIPrompt').value = data.openai_prompt || '';
+      } else if (data.provider === 'custom') {
+        $('customKey').value = data.key || '';
+        $('customModel').value = data.model || '';
+        $('customAIPrompt').value = data.openai_prompt || '';
+        $('customAIEndpoint').value = data.endpoint || '';
+      } else if (data.provider === 'houndify') {
+        $('houndKey').value = data.key || '';
+        $('houndID').value = data.id || '';
+      }
+      checkKG();
       renderHome();
     }
-    function deleteSavedChats() {
+    async function sendKGAPIKey() {
+      const provider = $('kgProvider').value;
+      const data = {
+        enable: true, provider: provider, key: '', model: '', id: '', intentgraph: false, robotName: '',
+        openai_prompt: '', openai_voice: '', openai_voice_with_english: false, save_chat: false,
+        commands_enable: false, endpoint: ''
+      };
+      if (provider === 'openai') {
+        data.key = $('openaiKey').value;
+        data.openai_base = $('openaiBase').value;
+        data.openai_prompt = $('openAIPrompt').value;
+        data.intentgraph = $('intentyes').checked;
+        data.save_chat = $('saveChatYes').checked;
+        data.commands_enable = $('commandYes').checked;
+        data.openai_voice = $('openaiVoice').value;
+        data.openai_voice_with_english = $('voiceEnglishYes').checked;
+      } else if (provider === 'custom') {
+        data.key = $('customKey').value;
+        data.model = $('customModel').value;
+        data.openai_prompt = $('customAIPrompt').value;
+        data.endpoint = $('customAIEndpoint').value;
+        data.intentgraph = $('intentyes').checked;
+        data.save_chat = $('saveChatYes').checked;
+        data.commands_enable = $('commandYes').checked;
+      } else if (provider === 'together') {
+        data.key = $('togetherKey').value;
+        data.model = $('togetherModel').value;
+        data.openai_prompt = $('togetherAIPrompt').value;
+        data.intentgraph = $('intentyes').checked;
+        data.save_chat = $('saveChatYes').checked;
+        data.commands_enable = $('commandYes').checked;
+      } else if (provider === 'houndify') {
+        data.key = $('houndKey').value;
+        data.id = $('houndID').value;
+        data.intentgraph = $('intentyes').checked;
+      } else {
+        data.enable = false;
+      }
+      if (data.save_chat) data.save_chat_num = parseInt($('saveChatNum').value, 10) || 0;
+      setStatus('addKGProviderAPIStatus', 'Saving...', 'warn');
+      const resp = await apiText('/api/set_kg_api', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data)
+      });
+      setStatus('addKGProviderAPIStatus', resp || 'Saved.', resp.includes('rror') ? 'err' : 'ok');
+      toast(resp || 'Knowledge graph settings applied');
+      updateKGAPI();
+    }
+    async function deleteSavedChats() {
       if (!confirm('Are you sure? This will delete all saved chats.')) return;
-      toast('Saved chats deleted (demo only)');
-      log('WARN', 'kg: saved chats deleted');
+      await apiText('/api/delete_chats');
+      toast('Successfully deleted all saved chats.');
     }
 
     /* ------------------------------ restart ------------------------------ */
-    function sendRestart() {
+    async function sendRestart() {
+      $('restartBar').style.width = '50%';
       setStatus('restartStatus', 'Restarting wire-pod...', 'warn');
-      log('WARN', 'wire-pod: restart requested');
-      let p = 0;
-      const t = setInterval(() => {
-        p += 7;
-        $('restartBar').style.width = Math.min(p, 100) + '%';
-        if (p >= 100) {
-          clearInterval(t);
-          setStatus('restartStatus', 'Wire-Pod restarted (simulated).', 'ok');
-          toast('Wire-Pod restarted (simulated)');
-          setTimeout(() => { $('restartBar').style.width = '0%'; }, 1200);
-        }
-      }, 120);
+      const resp = await apiText('/api/reset');
+      $('restartBar').style.width = '100%';
+      setStatus('restartStatus', resp || 'Restart command sent.', resp.includes('rror') ? 'err' : 'ok');
+      toast(resp || 'Restart command sent');
+      setTimeout(() => { $('restartBar').style.width = '0%'; }, 1500);
     }
 
     /* ------------------------------ STT language ------------------------------ */
-    function setSTTLanguage() {
-      const lang = $('languageSelection').value;
+    async function checkLanguage() {
+      /* same logic as the original showLanguage() */
+      const parsed = await apiJSON('/api/get_stt_info');
+      if (!parsed) return;
+      state.stt.provider = parsed.provider || '';
+      state.stt.language = parsed.language || 'en-US';
+      $('sttProviderBadge').textContent = (state.stt.provider || 'unknown') + ' · ' + state.stt.language;
+      $('initialProviderReadout').textContent = state.stt.provider || 'unknown';
+      if (state.stt.provider !== 'vosk' && state.stt.provider !== 'whisper.cpp') {
+        setStatus('languageStatus', "To set the STT language, the provider must be Vosk or Whisper. The current one is '" + (parsed.sttProvider || state.stt.provider) + "'.", 'err');
+        $('languageSelectionDiv').style.display = 'none';
+      } else {
+        setStatus('languageStatus', '');
+        $('languageSelectionDiv').style.display = 'flex';
+        $('languageSelection').value = state.stt.language;
+      }
+      renderInitialState();
+    }
+    async function setSTTLanguage() {
       setStatus('languageStatus', 'Setting...', 'warn');
-      let p = 0;
-      const t = setInterval(() => {
-        p += 10;
-        $('sttBar').style.width = Math.min(p, 100) + '%';
-        setStatus('languageStatus', 'Downloading model for ' + lang + '... ' + Math.min(p, 100) + '%', 'warn');
-        if (p >= 100) {
-          clearInterval(t);
-          state.stt.language = lang;
-          setStatus('languageStatus', 'Language set to ' + lang + ' (simulated download).', 'ok');
-          toast('STT language set to ' + lang);
-          log('INFO', 'stt: language set to ' + lang);
-          setTimeout(() => { $('sttBar').style.width = '0%'; }, 1200);
-          renderHome();
-        }
-      }, 220);
+      const resp = await apiText('/api/set_stt_info', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ language: $('languageSelection').value })
+      });
+      if (resp.includes('downloading')) {
+        setStatus('languageStatus', 'Downloading model...', 'warn');
+        $('sttBar').style.width = '50%';
+        const interval = setInterval(async () => {
+          const statusText = await apiText('/api/get_download_status');
+          setStatus('languageStatus', statusText.includes('not downloading') ? 'Initiating download...' : statusText, 'warn');
+          if (statusText.includes('success') || statusText.includes('error')) {
+            clearInterval(interval);
+            $('sttBar').style.width = '100%';
+            setStatus('languageStatus', statusText, statusText.includes('error') ? 'err' : 'ok');
+            toast('STT language: ' + statusText);
+            setTimeout(() => { $('sttBar').style.width = '0%'; }, 1200);
+          }
+        }, 500);
+      } else {
+        setStatus('languageStatus', resp, resp.includes('rror') ? 'err' : 'ok');
+        toast('STT language: ' + resp);
+        $('sttBar').style.width = resp.includes('success') ? '100%' : '0%';
+        setTimeout(() => { $('sttBar').style.width = '0%'; }, 1200);
+      }
+      checkLanguage();
+    }
+
+    /* ------------------------------ initial setup (first run) ------------------------------ */
+    function checkConn() {
+      $('portViz').style.display = $('connSelection').value === 'ip' ? 'flex' : 'none';
+    }
+    function initialGoTo(step) {
+      step = Math.max(1, Math.min(3, step));
+      state.initial.step = step;
+      [1, 2, 3].forEach((i) => { $('wizard-step-' + i).style.display = i === step ? 'block' : 'none'; });
+      document.querySelectorAll('#initialSteps .step').forEach((el) => {
+        const n = Number(el.dataset.step);
+        el.classList.toggle('active', n === step);
+        el.classList.toggle('done', n < step);
+      });
+      $('initialBackBtn').style.display = step === 1 ? 'none' : 'inline-flex';
+      $('initialNextBtn').innerHTML = step === 3 ? svg('check') + 'Submit settings' : 'Next';
+      if (step === 3) renderInitialReview();
+    }
+    function initialNext() {
+      if (state.initial.step < 3) { initialGoTo(state.initial.step + 1); return; }
+      submitInitialSetup();
+    }
+    function initialBack() { initialGoTo(state.initial.step - 1); }
+    function renderInitialReview() {
+      const conn = $('connSelection').value;
+      $('reviewConn').textContent = conn === 'ep' ? 'Escape Pod (ep)' : 'IP address (ip)';
+      $('reviewPort').textContent = conn === 'ip' ? ($('portInput').value || '443') : '-';
+      $('reviewProvider').textContent = state.stt.provider || 'unknown';
+      $('reviewLanguage').textContent = (state.stt.provider === 'vosk' || state.stt.provider === 'whisper.cpp') ? $('languageSelection').value : 'not set';
+    }
+    async function submitInitialSetup() {
+      /* same flow as the original initial.js sendSetupInfo() + setConn() */
+      if (state.initial.running) return;
+      state.initial.running = true;
+      const language = $('languageSelection').value;
+      $('initialActions').style.display = 'none';
+      $('initialBarWrap').style.display = 'block';
+      $('initialBar').style.width = '10%';
+      setStatus('initialStatus', 'Initiating setup...', 'warn');
+
+      const resp = await apiText('/api/set_stt_info', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ language: language })
+      });
+
+      const finish = () => {
+        setStatus('initialStatus', 'Setting connection type...', 'warn');
+        $('initialBar').style.width = '80%';
+        setTimeout(setConn, 400);
+      };
+
+      if (resp.includes('success')) {
+        setStatus('initialStatus', 'Language set successfully.', 'ok');
+        $('initialBar').style.width = '50%';
+        finish();
+      } else if (resp.includes('downloading')) {
+        setStatus('initialStatus', 'Downloading language model...', 'warn');
+        const interval = setInterval(async () => {
+          const statusText = await apiText('/api/get_download_status');
+          setStatus('initialStatus', statusText.includes('not downloading') ? 'Initiating language model download...' : statusText, 'warn');
+          if (statusText.includes('success')) {
+            clearInterval(interval);
+            setStatus('initialStatus', 'Language set successfully.', 'ok');
+            $('initialBar').style.width = '50%';
+            finish();
+          } else if (statusText.includes('error')) {
+            clearInterval(interval);
+            $('initialBar').style.width = '0%';
+            state.initial.running = false;
+            setStatus('initialStatus', statusText, 'err');
+          }
+        }, 500);
+      } else if (resp.includes('vosk')) {
+        $('initialBar').style.width = '50%';
+        finish();
+      } else if (resp.includes('error')) {
+        state.initial.running = false;
+        $('initialBar').style.width = '0%';
+        $('initialActions').style.display = 'flex';
+        setStatus('initialStatus', resp, 'err');
+      }
+    }
+    async function setConn() {
+      const connValue = $('connSelection').value;
+      let port = $('portInput').value;
+      port = port ? port : '443';
+      const url = connValue === 'ep' ? '/api-chipper/use_ep' : '/api-chipper/use_ip?port=' + port;
+      const resp = await apiText(url);
+      if (resp) {
+        $('initialBar').style.width = '100%';
+        setStatus('initialStatus', 'Setup is complete! Wire-pod has started. Redirecting to main page...', 'ok');
+        toast('Wire-pod setup complete');
+        state.initial.running = false;
+        setTimeout(() => { window.location.href = '/'; }, 3000);
+      } else {
+        state.initial.running = false;
+        $('initialBar').style.width = '0%';
+        $('initialActions').style.display = 'flex';
+        setStatus('initialStatus', 'Error setting up wire-pod, check the logs', 'err');
+      }
+    }
+    function directToIndex() {
+      showSection('home');
+    }
+    function renderInitialState() {
+      $('initialStateBadge').textContent = state.config && state.config.pastinitialsetup ? 'already set up' : 'setup required';
+      $('initialPastSetup').textContent = state.config && state.config.pastinitialsetup ? 'yes' : 'no';
+      $('initialConnState').textContent = ($('connSelection').value === 'ip' ? 'IP address (ip) · port ' + ($('portInput').value || '443') : 'Escape Pod (ep)');
+      $('initialSttState').textContent = (state.stt.provider || 'unknown') + ' · ' + state.stt.language;
+      renderHomeBanner();
+    }
+    function renderHomeBanner() {
+      const host = $('homeBanner');
+      if (!host) return;
+      if (state.config && state.config.pastinitialsetup) { host.innerHTML = ''; return; }
+      host.innerHTML =
+        '<div class="note warn" style="margin-bottom:16px">' + svg('info') +
+        '<div><b>Wire-Pod is not set up.</b> The original UI redirects to the initial setup page until first-time setup is finished. ' +
+        'Run the wizard to continue.<div style="margin-top:9px">' +
+        '<button class="btn sm primary" onclick="showSection(\'initial\')">' + svg('power') + 'Open initial setup</button></div></div></div>';
     }
 
     /* ------------------------------ BLE / bot setup ------------------------------ */
+    const vectorEpodSetup = 'https://wpsetup.keriganc.com';
+    let OTAUpdating = false;
     let bleReturning = false;
     function updateAuthel(html) { $('botAuth').innerHTML = html; }
     function checkBLECapability() {
       updateAuthel('<p>Checking if wire-pod can use BLE directly...</p>');
       $('disconnectButton').innerHTML = '';
-      setTimeout(() => {
-        log('INFO', 'ble: adapter available, starting pairing wizard');
-        beginBLESetup();
-      }, 600);
+      apiText('/api-ble/init').then((response) => {
+        if (response.includes('success')) beginBLESetup();
+        else showExternalSetupInstructions();
+      });
+    }
+    function showExternalSetupInstructions() {
+      $('disconnectButton').innerHTML = '';
+      updateAuthel(
+        '<p>Head to the following site on any device with Bluetooth support to set up your Vector.</p>' +
+        '<a href="' + vectorEpodSetup + '" target="_blank" rel="noreferrer">' + vectorEpodSetup + '</a>' +
+        '<br><small style="color:var(--muted-2)">Note: with OSKR/dev robots, it might give a warning about firmware. This can be ignored.</small>'
+      );
     }
     function beginBLESetup() {
       $('disconnectButton').innerHTML = '<button class="btn sm danger" onclick="disconnect()">' + svg('x') + 'Disconnect</button>';
@@ -1985,101 +2331,199 @@
         '<p><b>1.</b> Place Vector on the charger.</p>' +
         '<p><b>2.</b> Double press the button. A key should appear on screen.</p>' +
         '<p><b>3.</b> Press "Begin scanning" and pair with your Vector.</p>' +
-        '<button class="btn primary" onclick="scanRobots(false)">' + svg('wifi') + 'Begin scanning</button>'
+        '<button class="btn primary" onclick="scanRobots(false)">' + svg('wifi') + 'Begin Scanning</button>'
       );
     }
+    function reInitBLE() {
+      return apiText('/api-ble/disconnect').then(() => apiText('/api-ble/init'));
+    }
     function disconnect() {
-      $('disconnectButton').innerHTML = '';
-      bleReturning = false;
-      toast('Disconnected (simulated)');
-      log('INFO', 'ble: disconnected');
-      checkBLECapability();
+      updateAuthel('Disconnecting...');
+      OTAUpdating = false;
+      apiText('/api-ble/stop_ota').then(() => {
+        apiText('/api-ble/disconnect').then(() => checkBLECapability()).catch(() => checkBLECapability());
+      }).catch(() => checkBLECapability());
     }
     function scanRobots(returning) {
       bleReturning = returning;
-      updateAuthel((returning ? '<p>Incorrect PIN was entered, scanning again...</p>' : '') + '<p>Scanning for robots...</p>');
-      setTimeout(() => {
-        const robots = [{ id: 'AA:BB:01', name: 'Vector A1B2' }, { id: 'AA:BB:02', name: 'Vector C3D4' }, { id: 'AA:BB:03', name: 'Vector E5F6' }];
-        updateAuthel('<p>Click on the robot you would like to pair with.</p><div class="row">' +
-          robots.map((r) => '<button class="btn" onclick="connectRobot(\'' + r.id + '\',\'' + r.name + '\')">' + svg('robot') + esc(r.name) + '</button>').join('') +
-          '<button class="btn ghost" onclick="scanRobots(false)">' + svg('refresh') + 'Re-scan</button></div>');
-        log('DEBUG', 'ble: found ' + robots.length + ' robots');
-      }, 900);
+      $('disconnectButton').innerHTML = '<button class="btn sm danger" onclick="disconnect()">' + svg('x') + 'Disconnect</button>';
+      updateAuthel('Scanning...');
+      apiJSON('/api-ble/scan', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' } }).then((parsed) => {
+        let html = returning ? '<p>Incorrect PIN was entered, scanning again...</p>' : '';
+        html += '<p>Click on the robot you would like to pair with.</p><div class="row">' +
+          (Array.isArray(parsed) ? parsed.map((robot) =>
+            '<button class="btn" onclick="connectRobot(\'' + esc(robot.id) + '\')">' + svg('robot') + esc(robot.name) + '</button>').join('') : '') +
+          '<button class="btn ghost" onclick="scanRobots(false)">' + svg('refresh') + 'Re-scan</button></div>';
+        updateAuthel(html);
+      }).catch(() => {
+        updateAuthel('Error scanning. Reiniting BLE then scanning...');
+        reInitBLE().then(() => scanRobots(false));
+      });
     }
-    function connectRobot(id, name) {
-      updateAuthel('<p>Connecting to ' + esc(name) + '...</p>');
-      setTimeout(() => {
-        log('INFO', 'ble: connected to ' + name);
-        updateAuthel(
-          '<p>Enter the PIN shown on Vector\'s screen.</p>' +
-          '<div class="row"><input type="text" id="pinEntry" placeholder="Enter PIN here" maxlength="6" style="max-width:200px" />' +
-          '<button class="btn primary" onclick="sendPin()">Send PIN</button></div>' +
-          '<p class="hint" style="color:var(--muted-2);font-size:.76rem">Demo tip: any PIN works, "000000" simulates a wrong PIN.</p>'
-        );
-      }, 700);
+    function connectRobot(id) {
+      updateAuthel('Connecting to robot...');
+      apiText('/api-ble/connect?id=' + encodeURIComponent(id)).then((response) => {
+        if (response.includes('success')) createPinEntry();
+        else {
+          toast('Error connecting. WirePod will restart and this will return to the first screen of setup.', 'err');
+          updateAuthel('Waiting for WirePod to restart...');
+          setTimeout(checkBLECapability, 3000);
+        }
+      }).catch(() => {
+        toast('Error connecting. WirePod will restart and this will return to the first screen of setup.', 'err');
+        updateAuthel('Waiting for WirePod to restart...');
+        setTimeout(checkBLECapability, 3000);
+      });
+    }
+    function createPinEntry() {
+      updateAuthel(
+        '<p>Enter the pin shown on Vector\'s screen.</p>' +
+        '<div class="row"><input type="text" id="pinEntry" placeholder="Enter PIN here" maxlength="6" style="max-width:200px" />' +
+        '<button class="btn primary" onclick="sendPin()">Send PIN</button></div>'
+      );
     }
     function sendPin() {
       const pin = ($('pinEntry') && $('pinEntry').value) || '';
-      if (!pin) { toast('Enter the PIN first', 'err'); return; }
-      if (pin === '000000') { toast('Incorrect PIN', 'err'); scanRobots(true); return; }
-      updateAuthel('<p>Sending PIN...</p>');
-      setTimeout(() => { log('INFO', 'ble: pin accepted'); wifiCheck(); }, 500);
+      updateAuthel('Sending PIN...');
+      apiText('/api-ble/send_pin?pin=' + encodeURIComponent(pin)).then((response) => {
+        if (response.includes('incorrect pin') || response.includes('length of pin')) {
+          updateAuthel('Wrong PIN... Reiniting BLE then scanning...');
+          reInitBLE().then(() => scanRobots(true));
+        } else {
+          wifiCheck();
+        }
+      }).catch(() => {
+        updateAuthel('Error sending PIN... Reiniting BLE then scanning...');
+        reInitBLE().then(() => scanRobots(true));
+      });
     }
     function wifiCheck() {
-      updateAuthel('<p>Checking Wi-Fi status...</p>');
-      setTimeout(scanWifi, 600);
+      apiText('/api-ble/get_wifi_status').then((response) => {
+        if (response === '1') whatToDo();
+        else scanWifi();
+      }).catch(() => {
+        updateAuthel('Error checking Wi-Fi status... Reiniting BLE then scanning...');
+        reInitBLE().then(() => scanRobots(true));
+      });
     }
     function scanWifi() {
-      updateAuthel('<p>Scanning for Wi-Fi networks...</p>');
-      setTimeout(() => {
-        const nets = [{ ssid: 'HomeWiFi', auth: 'WPA2' }, { ssid: 'Neighbor_5G', auth: 'WPA2' }, { ssid: 'VectorLab', auth: 'WPA' }];
-        updateAuthel('<p>Select a Wi-Fi network to connect Vector to.</p><div class="row">' +
-          nets.map((n) => '<button class="btn" onclick="createWiFiPassEntry(\'' + n.ssid + '\',\'' + n.auth + '\')">' + svg('wifi') + esc(n.ssid) + '</button>').join('') +
-          '<button class="btn ghost" onclick="scanWifi()">' + svg('refresh') + 'Scan again</button></div>');
-      }, 800);
+      updateAuthel('Scanning for Wi-Fi networks...');
+      apiJSON('/api-ble/scan_wifi').then((networks) => {
+        updateAuthel(
+          '<p>Select a Wi-Fi network to connect Vector to.</p><div class="row">' +
+          '<button class="btn ghost" onclick="scanWifi()">' + svg('refresh') + 'Scan Again</button>' +
+          (Array.isArray(networks) ? networks.filter((n) => n.ssid).map((network) =>
+            '<button class="btn" onclick="createWiFiPassEntry(\'' + esc(network.ssid) + '\', \'' + esc(network.authtype) + '\')">' + svg('wifi') + esc(network.ssid) + '</button>').join('') : '') +
+          '</div>'
+        );
+      }).catch(() => {
+        updateAuthel('Error scanning Wi-Fi networks... Reiniting BLE then scanning...');
+        reInitBLE().then(() => scanRobots(true));
+      });
     }
-    function createWiFiPassEntry(ssid, auth) {
+    function createWiFiPassEntry(ssid, authtype) {
       updateAuthel(
-        '<p>Enter the password for <b>' + esc(ssid) + '</b> (' + esc(auth) + ')</p>' +
+        '<button class="btn ghost sm" onclick="scanWifi()">Scan Again</button>' +
+        '<p>Enter the password for <b>' + esc(ssid) + '</b> (' + esc(authtype) + ')</p>' +
         '<div class="row"><input type="text" id="passEntry" placeholder="Password" style="max-width:240px" />' +
-        '<button class="btn primary" onclick="connectWifi(\'' + esc(ssid) + '\')">Connect to Wi-Fi</button></div>' +
-        '<button class="btn ghost sm" onclick="scanWifi()">Back to networks</button>' +
-        '<p class="hint" style="color:var(--muted-2);font-size:.76rem">Demo tip: the password "wrong" simulates a failed connection.</p>'
+        '<button class="btn primary" onclick="connectWifi(\'' + esc(ssid) + '\', \'' + esc(authtype) + '\')">Connect to Wi-Fi</button></div>'
       );
     }
-    function connectWifi(ssid) {
-      const pass = ($('passEntry') && $('passEntry').value) || '';
-      if (pass === 'wrong') { toast('Error connecting, likely incorrect password', 'err'); createWiFiPassEntry(ssid, 'WPA2'); return; }
-      updateAuthel('<p>Connecting Vector to ' + esc(ssid) + '...</p>');
-      setTimeout(() => { log('INFO', 'ble: robot joined ' + ssid); whatToDo(); }, 900);
+    function connectWifi(ssid, authtype) {
+      const password = ($('passEntry') && $('passEntry').value) || '';
+      updateAuthel('Connecting Vector to Wi-Fi...');
+      apiText('/api-ble/connect_wifi?ssid=' + encodeURIComponent(ssid) + '&password=' + encodeURIComponent(password) + '&authType=' + encodeURIComponent(authtype)).then((response) => {
+        if (!response.includes('255')) {
+          toast('Error connecting, likely incorrect password', 'err');
+          createWiFiPassEntry(ssid, authtype);
+        } else {
+          whatToDo();
+        }
+      }).catch(() => {
+        updateAuthel('Error connecting to Wi-Fi... Reiniting BLE then scanning...');
+        reInitBLE().then(() => scanRobots(true));
+      });
     }
     function whatToDo() {
-      updateAuthel('<p>Checking robot status...</p>');
-      setTimeout(() => { log('INFO', 'ble: robot is on escape pod firmware'); showAuthButton(); }, 700);
+      apiText('/api-ble/get_robot_status').then((response) => {
+        switch (response) {
+          case 'in_recovery_prod': doOTA('local'); break;
+          case 'in_recovery_dev': doOTA('http://wpsetup.keriganc.com:81/1.6.0.3331.ota'); break;
+          case 'in_firmware_nonep': showRecoveryInstructions(); break;
+          case 'in_firmware_dev': showDevWarning(); break;
+          case 'in_firmware_ep': showAuthButton(); break;
+          default: showAuthButton(); break;
+        }
+      });
+    }
+    function showRecoveryInstructions() {
+      updateAuthel(
+        '<p><b>1.</b> Place Vector on the charger.</p>' +
+        '<p><b>2.</b> Hold the button for 15 seconds. He will turn off - keep holding it until he turns back on.</p>' +
+        '<p><b>3.</b> Press "Begin Scanning" and pair with your Vector.</p>' +
+        '<button class="btn primary" onclick="scanRobots(false)">' + svg('wifi') + 'Begin Scanning</button>'
+      );
+      toast('Your bot is not on the correct firmware for wire-pod. Follow the directions to put him in recovery mode.', 'warn');
+    }
+    function showDevWarning() {
+      toast("Your bot is a dev robot. Make sure you have done the 'Configure an OSKR/dev-unlocked robot' section before authentication. If you did already, you can ignore this warning.", 'warn');
+      showAuthButton();
     }
     function showAuthButton() {
-      updateAuthel('<button class="btn primary" onclick="doAuth()">' + svg('key') + 'Authenticate</button>');
+      updateAuthel('<button class="btn primary" onclick="doAuth()">' + svg('key') + 'AUTHENTICATE</button>');
+    }
+    function doOTA(url) {
+      updateAuthel('Starting OTA update...');
+      apiText('/api-ble/start_ota?url=' + encodeURIComponent(url)).then((response) => {
+        if (response.includes('success')) {
+          OTAUpdating = true;
+          const interval = setInterval(async () => {
+            const otaResponse = await apiText('/api-ble/get_ota_status');
+            updateAuthel(esc(otaResponse));
+            if (otaResponse.includes('complete')) {
+              toast('The OTA update is complete. When the bot reboots, follow the steps to re-pair the bot with wire-pod. wire-pod will then authenticate the robot and setup will be complete.');
+              OTAUpdating = false;
+              clearInterval(interval);
+              checkBLECapability();
+            } else if (otaResponse.includes('stopped') || !OTAUpdating) {
+              clearInterval(interval);
+            }
+          }, 2000);
+        } else {
+          whatToDo();
+        }
+      });
     }
     function doAuth() {
-      updateAuthel('<p>Authenticating your Vector...</p>');
-      setTimeout(() => {
-        log('INFO', 'ble: authentication successful');
-        updateAuthel(
-          '<p style="color:var(--accent)">Authentication was successful! How would you like to wake Vector up?</p>' +
-          '<div class="row"><button class="btn primary" onclick="doOnboard(true)">Wake with wake-up animation (recommended)</button>' +
-          '<button class="btn" onclick="doOnboard(false)">Wake immediately, without animation</button></div>'
-        );
-      }, 1100);
+      updateAuthel('Authenticating your Vector...');
+      apiText('/api-ble/do_auth').then((response) => {
+        if (response.includes('error')) showAuthError();
+        else showWakeOptions();
+      });
+    }
+    function showAuthError() {
+      updateAuthel(
+        'Authentication failure. Try again in ~15 seconds. If it happens again, check the troubleshooting guide:<br>' +
+        '<a href="https://github.com/kercre123/wire-pod/wiki/Troubleshooting#error-logging-in-the-bot-is-likely-unable-to-communicate-with-your-wire-pod-instance" target="_blank" rel="noreferrer">https://github.com/kercre123/wire-pod/wiki/Troubleshooting</a>'
+      );
+    }
+    function showWakeOptions() {
+      updateAuthel(
+        '<p>Authentication was successful! How would you like to wake Vector up?</p>' +
+        '<div class="row"><button class="btn primary" onclick="doOnboard(true)">Wake with wake-up animation (recommended)</button>' +
+        '<button class="btn" onclick="doOnboard(false)">Wake immediately, without wake-up animation</button></div>'
+      );
     }
     function doOnboard(withAnim) {
-      updateAuthel('<p>Onboarding robot' + (withAnim ? ' with wake-up animation' : '') + '...</p>');
-      setTimeout(() => {
+      updateAuthel('Onboarding robot...');
+      apiText('/api-ble/onboard?with_anim=' + withAnim).then(() => {
+        apiText('/api-ble/disconnect');
         $('disconnectButton').innerHTML = '';
-        updateAuthel('<p style="color:var(--accent)">Vector is now fully set up! Use the Bot · Vector pages in the sidebar to configure it.</p>' +
-          '<button class="btn" onclick="checkBLECapability()">' + svg('refresh') + 'Return to pair instructions</button>');
-        toast('Vector is fully set up (simulated)');
-        log('INFO', 'ble: onboarding complete');
-      }, 1200);
+        updateAuthel(
+          '<p style="color:var(--accent)">Vector is now fully set up! Use the Bot · Vector pages in the sidebar to further configure your bot.</p>' +
+          '<button class="btn" onclick="checkBLECapability()">' + svg('refresh') + 'Return to pair instructions</button>'
+        );
+      });
     }
     function updateSSHStatus(msg, kind) {
       const p = document.createElement('p');
@@ -2090,44 +2534,145 @@
     }
     function doSSHSetup() {
       const ip = $('sshIp').value.trim();
-      const file = $('sshKeyFile').files[0];
-      if (!ip || !file) { updateSSHStatus('You must enter an IP address and upload a key.', 'err'); return; }
-      $('oskrSetup').style.display = 'none';
-      const steps = ['Copying over wire-pod files...', 'Installing dependencies...', 'Setting up systemd...', 'File transfer complete!'];
-      let i = 0;
-      updateSSHStatus(steps[0], 'warn');
-      const t = setInterval(() => {
-        i++;
-        if (i < steps.length) { updateSSHStatus(steps[i], 'warn'); return; }
-        clearInterval(t);
-        updateSSHStatus('File transfer complete! Use the authentication section above to finish bot setup. The bot should eventually be on the onboarding screen.', 'ok');
-        log('INFO', 'ssh: setup finished for ' + ip);
-        $('oskrSetup').style.display = 'block';
-      }, 900);
+      const key = $('sshKeyFile').files[0];
+      if (!ip || !key) { updateSSHStatus('You must enter an IP address and upload a key.', 'err'); return; }
+      const formData = new FormData();
+      formData.append('key', key);
+      formData.append('ip', ip);
+      fetch('/api-ssh/setup', { method: 'POST', body: formData })
+        .then((response) => response.text())
+        .then((response) => {
+          if (response.includes('running')) {
+            $('oskrSetup').style.display = 'none';
+            updateSSHSetup();
+            return;
+          }
+          updateSSHStatus(response, 'err');
+        }).catch(() => updateSSHStatus('error: wire-pod backend unreachable', 'err'));
+    }
+    function updateSSHSetup() {
+      const interval = setInterval(() => {
+        apiText('/api-ssh/get_setup_status').then((response) => {
+          if (response.includes('done')) {
+            updateSSHStatus('File transfer complete! Use the authentication section above to complete bot setup. The bot should eventually be on the onboarding screen.', 'ok');
+            $('oskrSetup').style.display = 'block';
+            clearInterval(interval);
+          } else if (response.includes('error')) {
+            let resp = response;
+            if (response.includes('no route to host')) {
+              resp = 'Wire-pod was unable to connect to the robot. Make sure the robot is running OSKR/dev software and that it is on the same network as this wire-pod instance. Also double-check the IP.';
+            }
+            updateSSHStatus(resp, 'err');
+            clearInterval(interval);
+            $('oskrSetup').style.display = 'block';
+          } else if (response.includes('not running')) {
+            updateSSHStatus('Initiating SSH transfer...', 'warn');
+          } else {
+            updateSSHStatus(response, 'warn');
+          }
+        });
+      }, 500);
     }
 
-    /* ------------------------------ SDK settings readouts ------------------------------ */
-    function renderSettingsReadouts() {
-      // volume
-      $('currentVolume').textContent = VOLUMES[state.sdk.volume];
-      $('volumeBar').style.width = (state.sdk.volume / 5 * 100) + '%';
-      document.querySelectorAll('input[name="sdkvol"]').forEach((r) => { r.checked = Number(r.value) === state.sdk.volume; });
-      // eyes
-      $('currentEyeColor').textContent = state.sdk.customEye ? 'Custom (' + state.sdk.customEye.hex + ')' : EYE_COLORS[state.sdk.eyeColor].name;
-      document.querySelectorAll('input[name="sdkEye"]').forEach((r) => { r.checked = Number(r.value) === state.sdk.eyeColor && !state.sdk.customEye; });
-      // locale / time / temp / button
-      $('currentLocale').textContent = LOCALES.find((l) => l.id === state.sdk.locale).label;
-      $('currentTimeSet').textContent = state.sdk.time24 ? '24 hour' : '12 hour';
-      $('currentTempFormat').textContent = state.sdk.fahrenheit ? 'Fahrenheit' : 'Celsius';
-      $('currentButton').textContent = state.sdk.button === 0 ? 'Hey Vector' : 'Alexa';
-      $('alexaStatus').textContent = state.sdk.alexa ? 'signed in (demo)' : 'not signed in';
-      $('currentLocation').textContent = state.sdk.location;
-      $('currentTimeZone').textContent = state.sdk.timezone;
-      $('locationInput').placeholder = state.sdk.location;
-      $('tzInput').value = state.sdk.timezone;
-      $('faceCount').textContent = state.faces.length + ' face' + (state.faces.length === 1 ? '' : 's');
-      $('sttProviderBadge').textContent = state.stt.provider + ' · ' + state.stt.language;
+    /* ------------------------------ robots / battery ------------------------------ */
+    function getBatteryPercentage(voltage) {
+      /* same curve as the original battery.js */
+      let percentage;
+      const maxVoltage = 4.1, midVoltage = 3.85, minVoltage = 3.5;
+      if (voltage >= maxVoltage) percentage = 100;
+      else if (voltage >= midVoltage) {
+        const scaled = (voltage - midVoltage) / (maxVoltage - midVoltage);
+        percentage = 80 + 20 * Math.log10(1 + scaled * 9);
+      } else if (voltage >= minVoltage) {
+        const scaled = (voltage - minVoltage) / (midVoltage - minVoltage);
+        percentage = 80 * Math.log10(1 + scaled * 9);
+      } else if (!voltage) percentage = 70;
+      else percentage = 0;
+      return Math.max(0, Math.min(100, Math.round(percentage)));
     }
+    function botCardHtml(r, i) {
+      const pct = r.unknown ? null : r.battery;
+      const cls = pct === null ? '' : pct < 20 ? 'low' : pct < 50 ? 'mid' : '';
+      const label = r.unknown ? '??%' : '~' + pct + '%';
+      const volts = (r.volts || r.volts === 0) && !r.unknown ? Number(r.volts).toFixed(2) + 'V' : '--V';
+      const charge = r.charging && r.chargeSec ? ' · ~' + r.chargeSec + 's to full' : '';
+      const faceStyle = r.unknown ? ' style="opacity:.35"' : '';
+      return '<div class="bot-card' + (i === state.activeRobot ? ' selected' : '') + '" onclick="openRobot(' + i + ')" title="' + esc(r.esn) + ' · ' + label + ' · ' + volts + '">' +
+        '<div class="bot-face"' + faceStyle + '><div class="eyes"><i></i><i></i></div><div class="mouth"></div></div>' +
+        '<div class="bot-meta"><b>' + esc(r.esn) + '</b><small>' + esc(r.ip || '') + '</small><small>' + label + ' · ' + volts + (r.charging ? ' · on charger' : '') + charge + '</small></div>' +
+        '<div class="battery-outline' + (r.charging ? ' charging' : '') + '"><div class="battery-fill ' + cls + '" style="width:' + (pct === null ? 0 : pct) + '%"></div><div class="battery-bolt">' + svg('bolt') + '</div></div>' +
+        '</div>';
+    }
+    function renderBots() {
+      const host = $('botStats');
+      if (!state.robots.length) {
+        host.innerHTML = '<div class="note">' + svg('info') + '<div>No authenticated robots found. Pair a Vector with <b>Bot Setup</b>, then reload this page.</div></div>';
+      } else {
+        host.innerHTML = state.robots.map((r, i) => botCardHtml(r, i)).join('');
+      }
+      $('robotSelect').innerHTML = state.robots.map((r, i) =>
+        '<option value="' + i + '"' + (i === state.activeRobot ? ' selected' : '') + '>' + esc(r.esn) + '</option>').join('');
+      updateHomeActive();
+    }
+    function updateHomeActive() {
+      const r = state.robots[state.activeRobot];
+      if (!r) { $('homeSerial').textContent = '—'; $('homeBattery').textContent = '—'; $('homeCharger').textContent = '—'; return; }
+      $('homeSerial').textContent = r.esn;
+      $('homeBattery').textContent = r.unknown ? 'unknown' : '~' + r.battery + '%';
+      $('homeCharger').textContent = r.unknown ? 'unknown' : (r.charging ? 'on platform' + (r.chargeSec ? ' · ~' + r.chargeSec + 's left' : '') : 'off platform');
+    }
+    async function loadRobots() {
+      const info = await getSDKInfo();
+      if (!info || !info.robots || !info.robots.length) {
+        state.robots = [];
+        state.activeRobot = -1;
+        renderBots();
+        return;
+      }
+      state.robots = info.robots.map((r) => ({ esn: r.esn, ip: r.ip_address || '', battery: null, volts: null, level: null, charging: false, chargeSec: 0, unknown: true }));
+      state.activeRobot = 0;
+      renderBots();
+      state.robots.forEach((r, i) => pollBattery(r.esn, i));
+      await connectToRobot(0, true);
+    }
+    async function pollBattery(esn, i) {
+      const r = state.robots[i];
+      if (!r || r.esn !== esn) return;
+      const st = await getBatteryStatus(esn);
+      if (!r || r.esn !== esn) return;
+      if (!st) r.unknown = true;
+      else {
+        let pct = getBatteryPercentage(st.battery_volts);
+        let level = st.battery_level;
+        if (level === 2) { if (pct < 20) level = 0; else if (pct < 50) level = 1; }
+        else if (level === 1 && !st.is_on_charger_platform) { pct = Math.min(15, pct); level = 0; }
+        r.battery = pct; r.volts = st.battery_volts; r.level = level;
+        r.charging = !!st.is_on_charger_platform;
+        r.chargeSec = st.suggested_charger_sec || 0;
+        r.unknown = false;
+      }
+      renderBots();
+      setTimeout(() => pollBattery(esn, i), r.unknown ? 6000 : 3000);
+    }
+    async function connectToRobot(i, silent) {
+      if (!state.robots[i]) return;
+      state.activeRobot = i;
+      renderBots();
+      const esn = state.robots[i].esn;
+      const resp = await apiText('/api-sdk/conn_test?serial=' + encodeURIComponent(esn));
+      if (resp.includes('success')) {
+        if (!silent) toast('Connected to ' + esn);
+        await getCurrentSettings();
+      } else {
+        toast('Could not connect to ' + esn + ': ' + (resp || 'unknown error'), 'err');
+      }
+    }
+    function selectRobot(i) { connectToRobot(Number(i)); }
+    function openRobot(i) {
+      connectToRobot(i).then(() => showSection('volume'));
+    }
+
+    /* ------------------------------ sdk settings ------------------------------ */
     function radioGroup(hostId, name, options, onChange, checkedIndex) {
       const host = $(hostId);
       host.innerHTML = options.map((o, i) =>
@@ -2137,38 +2682,86 @@
       ).join('');
     }
     function buildSdkControls() {
-      radioGroup('volumeOpts', 'sdkvol', VOLUMES.map((v) => ({ label: v })), 'setVolume', state.sdk.volume);
-      radioGroup('eyeOpts', 'sdkEye', EYE_COLORS.map((c) => ({ label: c.name, swatch: c.hex })), 'setEyeColor', state.sdk.eyeColor);
-      radioGroup('localeOpts', 'sdkLocale', LOCALES.map((l) => ({ label: l.label })), 'setLocale', LOCALES.findIndex((l) => l.id === state.sdk.locale));
-      radioGroup('timeOpts', 'sdkTime', [{ label: '12 hour' }, { label: '24 hour' }], 'setTimeFormat', state.sdk.time24 ? 1 : 0);
-      radioGroup('tempOpts', 'sdkTemp', [{ label: 'Celsius' }, { label: 'Fahrenheit' }], 'setTempFormat', state.sdk.fahrenheit ? 1 : 0);
-      radioGroup('buttonOpts', 'sdkButton', [{ label: 'Hey Vector' }, { label: 'Alexa' }], 'setButtonAction', state.sdk.button);
-      $('tzInput').innerHTML = TIMEZONES.map((tz) => '<option value="' + tz + '"' + (tz === state.sdk.timezone ? ' selected' : '') + '>' + tz + '</option>').join('');
+      radioGroup('volumeOpts', 'sdkvol', VOLUMES.map((v) => ({ label: v })), 'setVolume', 3);
+      radioGroup('eyeOpts', 'sdkEye', EYE_COLORS.map((c) => ({ label: c.name, swatch: c.hex })), 'setEyeColor', 0);
+      radioGroup('localeOpts', 'sdkLocale', LOCALES.map((l) => ({ label: l.label })), 'setLocale', 0);
+      radioGroup('timeOpts', 'sdkTime', [{ label: '12 hour' }, { label: '24 hour' }], 'setTimeFormat', 0);
+      radioGroup('tempOpts', 'sdkTemp', [{ label: 'Celsius' }, { label: 'Fahrenheit' }], 'setTempFormat', 1);
+      radioGroup('buttonOpts', 'sdkButton', [{ label: 'Hey Vector' }, { label: 'Alexa' }], 'setButtonAction', 0);
+      $('tzInput').innerHTML = TIMEZONES.map((tz) => '<option value="' + tz + '">' + tz + '</option>').join('');
       $('quickActions').innerHTML = [
         ['explore_start', 'Explore Start'], ['intent_imperative_dance', 'Listen for Beat'],
         ['intent_system_sleep', 'Go to Sleep'], ['intent_imperative_fetchcube', 'Fetch Cube'],
         ['intent_system_charger', 'Go Home']
       ].map((a) => '<button class="btn" onclick="quickAction(\'' + a[0] + '\',\'' + esc(a[1]) + '\')">' + svg('play') + esc(a[1]) + '</button>').join('');
     }
-    function setVolume(i) { state.sdk.volume = i; log('INFO', 'sdk: volume set to ' + VOLUMES[i]); toast('Volume: ' + VOLUMES[i]); renderSettingsReadouts(); }
-    function setEyeColor(i) { state.sdk.eyeColor = i; state.sdk.customEye = null; log('INFO', 'sdk: eye color set to ' + EYE_COLORS[i].name); toast('Eye color: ' + EYE_COLORS[i].name); renderSettingsReadouts(); }
-    function setLocale(i) { state.sdk.locale = LOCALES[i].id; log('INFO', 'sdk: locale set to ' + LOCALES[i].id); toast('Locale: ' + LOCALES[i].label); renderSettingsReadouts(); }
-    function setTimeFormat(i) { state.sdk.time24 = i === 1; toast('Time format: ' + (i === 1 ? '24 hour' : '12 hour')); renderSettingsReadouts(); }
-    function setTempFormat(i) { state.sdk.fahrenheit = i === 1; toast('Units: ' + (i === 1 ? 'Fahrenheit' : 'Celsius')); renderSettingsReadouts(); }
-    function setButtonAction(i) { state.sdk.button = i; toast('Button action: ' + (i === 0 ? 'Hey Vector' : 'Alexa')); renderSettingsReadouts(); }
-    function quickAction(intent, label) {
-      if (!$('assume_control').checked && ['explore_start', 'intent_imperative_fetchcube'].includes(intent)) {
-        toast('Assume behavior control first', 'warn');
+    async function getCurrentSettings() {
+      /* same jdoc contract as the original getCurrentSettings() */
+      if (!state.robots.length || state.activeRobot < 0) return;
+      const jdoc = await apiJSON(sdkUrl('/api-sdk/get_sdk_settings'), { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' } });
+      if (!jdoc) return;
+      let eyeColorT = 'none';
+      const eyeNames = { 0: 'Teal', 1: 'Orange', 2: 'Yellow', 3: 'Lime Green', 4: 'Azure Blue', 5: 'Purple', 6: 'Other Green' };
+      if (jdoc.custom_eye_color) {
+        const customECE = jdoc.custom_eye_color.enabled;
+        if (`${customECE}` == 'true') {
+          const hue = Number(jdoc.custom_eye_color.hue) || 0;
+          const sat = Number(jdoc.custom_eye_color.saturation) || 0;
+          state.sdk.customEye = { enabled: true, hue: hue, sat: sat };
+          $('customEyePicker').value = hslToHex(hue, sat);
+          $('customEyeHue').textContent = hue.toFixed(3);
+          $('customEyeSat').textContent = sat.toFixed(3);
+          eyeColorT = 'Custom';
+        } else {
+          state.sdk.customEye = null;
+        }
+      } else {
+        state.sdk.customEye = null;
       }
-      toast('Sent: ' + label);
-      log('INFO', 'sdk: cloud intent ' + intent + ' sent to ' + state.robots[state.activeRobot].esn);
+      state.sdk.eyeColor = Number(jdoc.eye_color) || 0;
+      if (!state.sdk.customEye) eyeColorT = eyeNames[state.sdk.eyeColor] || 'none';
+      state.sdk.volume = Number(jdoc.master_volume);
+      state.sdk.locale = jdoc.locale || 'en-US';
+      state.sdk.time24 = `${jdoc.clock_24_hour}` === 'true';
+      state.sdk.fahrenheit = `${jdoc.temp_is_fahrenheit}` === 'true';
+      state.sdk.button = Number(jdoc.button_wakeword) || 0;
+      state.sdk.location = jdoc.default_location || '';
+      state.sdk.timezone = jdoc.time_zone || '';
+      renderSettingsReadouts();
+      updateStats();
     }
-    function updateCustomEyePreview() {
-      const hex = $('customEyePicker').value;
-      const hue = hexToHue(hex);
-      $('customEyeHue').textContent = hue.toFixed(3);
-      $('customEyeSat').textContent = '1.000';
-      return { hex: hex, hue: hue };
+    function renderSettingsReadouts() {
+      $('currentVolume').textContent = VOLUMES[state.sdk.volume] || 'none';
+      $('volumeBar').style.width = (state.sdk.volume / 5 * 100) + '%';
+      document.querySelectorAll('input[name="sdkvol"]').forEach((r) => { r.checked = Number(r.value) === state.sdk.volume; });
+      $('currentEyeColor').textContent = state.sdk.customEye ? 'Custom' : (EYE_COLORS[state.sdk.eyeColor] ? EYE_COLORS[state.sdk.eyeColor].name : 'none');
+      document.querySelectorAll('input[name="sdkEye"]').forEach((r) => { r.checked = Number(r.value) === state.sdk.eyeColor && !state.sdk.customEye; });
+      const locale = LOCALES.find((l) => l.id === state.sdk.locale);
+      $('currentLocale').textContent = locale ? locale.label : state.sdk.locale;
+      document.querySelectorAll('input[name="sdkLocale"]').forEach((r) => { r.checked = LOCALES[Number(r.value)] && LOCALES[Number(r.value)].id === state.sdk.locale; });
+      $('currentTimeSet').textContent = state.sdk.time24 ? '24 hour' : '12 hour';
+      document.querySelectorAll('input[name="sdkTime"]').forEach((r) => { r.checked = Number(r.value) === (state.sdk.time24 ? 1 : 0); });
+      $('currentTempFormat').textContent = state.sdk.fahrenheit ? 'Fahrenheit' : 'Celsius';
+      document.querySelectorAll('input[name="sdkTemp"]').forEach((r) => { r.checked = Number(r.value) === (state.sdk.fahrenheit ? 1 : 0); });
+      $('currentButton').textContent = state.sdk.button === 0 ? 'Hey Vector' : 'Alexa';
+      document.querySelectorAll('input[name="sdkButton"]').forEach((r) => { r.checked = Number(r.value) === state.sdk.button; });
+      $('alexaStatus').textContent = state.sdk.alexa ? 'signed in' : 'not signed in';
+      $('currentLocation').textContent = state.sdk.location || 'not set';
+      $('currentTimeZone').textContent = state.sdk.timezone || 'not set';
+      $('locationInput').placeholder = state.sdk.location || 'San Francisco, California';
+      $('tzInput').value = state.sdk.timezone || 'GMT';
+      $('faceCount').textContent = state.faces.length + ' face' + (state.faces.length === 1 ? '' : 's');
+      renderHome();
+    }
+    function setVolume(i) { sendForm('/api-sdk/volume?volume=' + i); }
+    function setEyeColor(i) { state.sdk.customEye = null; sendForm('/api-sdk/eye_color?color=' + i); }
+    function setLocale(i) { const l = LOCALES[i]; if (l) sendForm('/api-sdk/locale?locale=' + encodeURIComponent(l.id)); }
+    function setTimeFormat(i) { sendForm(i === 1 ? '/api-sdk/time_format_24' : '/api-sdk/time_format_12'); }
+    function setTempFormat(i) { sendForm(i === 1 ? '/api-sdk/temp_f' : '/api-sdk/temp_c'); }
+    function setButtonAction(i) { sendForm(i === 0 ? '/api-sdk/button_hey_vector' : '/api-sdk/button_alexa'); }
+    function quickAction(intent, label) {
+      sendForm('/api-sdk/cloud_intent?intent=' + encodeURIComponent(intent));
+      toast('Sent: ' + label);
     }
     function hexToHue(hex) {
       const [r, g, b] = hexToRgb(hex).map((v) => v / 255);
@@ -2181,63 +2774,94 @@
       h = h / 6;
       return h < 0 ? h + 1 : h;
     }
+    function hexToHslSat(hex) {
+      const [r, g, b] = hexToRgb(hex).map((v) => v / 255);
+      const max = Math.max(r, g, b), min = Math.min(r, g, b), d = max - min;
+      if (d === 0) return 0;
+      return d / (1 - Math.abs(2 * ((max + min) / 2) - 1));
+    }
+    function hslToHex(h, s) {
+      const f = (n) => {
+        const k = (n + h * 12) % 12;
+        const c = 0.5 - s * Math.max(-1, Math.min(Math.min(k - 3, 9 - k), 1));
+        return Math.round(255 * c).toString(16).padStart(2, '0');
+      };
+      return '#' + f(0) + f(8) + f(4);
+    }
+    function updateCustomEyePreview() {
+      const hex = $('customEyePicker').value;
+      $('customEyeHue').textContent = hexToHue(hex).toFixed(3);
+      $('customEyeSat').textContent = hexToHslSat(hex).toFixed(3);
+      return { hex: hex, hue: hexToHue(hex), sat: hexToHslSat(hex) };
+    }
     function sendCustomColor() {
+      /* same body contract as the original: hue/sat as 0..1 fractions */
       const info = updateCustomEyePreview();
-      state.sdk.customEye = info;
-      log('INFO', 'sdk: custom eye color hue=' + info.hue.toFixed(3) + ' sat=1.000');
-      toast('Custom eye color applied (demo)');
-      renderSettingsReadouts();
+      const data = 'hue=' + info.hue.toFixed(3) + '&sat=' + info.sat.toFixed(3);
+      if (!state.robots.length) { toast('No robot connected yet.', 'warn'); return; }
+      fetch(sdkUrl('/api-sdk/custom_eye_color'), { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: data })
+        .then(() => getCurrentSettings())
+        .catch(() => { });
+      toast('Custom eye color sent to robot');
     }
 
     /* ------------------------------ faces ------------------------------ */
-    function refreshFaceList() {
+    async function refreshFaceList() {
+      const resp = await apiText(sdkUrl('/api-sdk/get_faces'));
       const list = $('faceList');
-      if (!state.faces.length) {
+      if (resp.includes('null') || !resp.trim()) {
+        state.faces = [];
         list.innerHTML = '<option value="none">No faces found. You must tell Vector your name.</option>';
       } else {
-        list.innerHTML = state.faces.map((f) => '<option value="' + f.id + '">' + esc(f.name) + '</option>').join('');
+        try {
+          const parsed = JSON.parse(resp);
+          state.faces = Array.isArray(parsed) ? parsed : [];
+          list.innerHTML = state.faces.map((f) => '<option value="' + esc(f.face_id) + '">' + esc(f.name) + '</option>').join('');
+        } catch (e) {
+          state.faces = [];
+          list.innerHTML = '<option value="none">No faces found. You must tell Vector your name.</option>';
+        }
       }
       $('faceCount').textContent = state.faces.length + ' face' + (state.faces.length === 1 ? '' : 's');
+      renderHome();
     }
-    function addFace() {
+    async function addFace() {
       const name = $('faceInput').value.trim();
-      if (!name) { setStatus('faceStatus', 'You must enter a name.', 'err'); toast('Enter a face name', 'err'); return; }
-      state.faces.push({ id: 'f' + Date.now(), name });
-      $('faceInput').value = '';
-      setStatus('faceStatus', 'Request sent - Vector should now be looking for ' + name + ' (simulated).', 'ok');
-      toast('Face "' + name + '" added');
-      log('INFO', 'faces: add request for "' + name + '"');
-      refreshFaceList(); renderSettingsReadouts();
-    }
-    function renameFace() {
-      if (!state.faces.length) { toast('You must register a face first.', 'warn'); return; }
-      const f = state.faces.find((x) => x.id === $('faceList').value);
-      if (!f) return;
-      const name = prompt('Enter the new name here:', f.name);
-      if (name === null) return;
-      if (!name.trim()) { toast('Face name cannot be empty', 'err'); return; }
-      f.name = name.trim();
-      toast('Face renamed');
-      log('INFO', 'faces: renamed to "' + f.name + '"');
+      if (!name) { setStatus('faceStatus', 'You must enter a name.', 'err'); toast('You must enter a name.', 'err'); return; }
+      const resp = await apiText(sdkUrl('/api-sdk/add_face') + '&name=' + encodeURIComponent(name));
+      setStatus('faceStatus', resp || 'Request sent - Vector should now be finding a face to scan.', 'ok');
+      toast(resp || 'Request sent - Vector should now be finding a face to scan.');
       refreshFaceList();
     }
-    function deleteFace() {
+    async function renameFace() {
       if (!state.faces.length) { toast('You must register a face first.', 'warn'); return; }
       const id = $('faceList').value;
-      state.faces = state.faces.filter((x) => x.id !== id);
-      toast('Face deleted');
-      log('INFO', 'faces: deleted ' + id);
-      refreshFaceList(); renderSettingsReadouts();
+      const old = (state.faces.find((f) => f.face_id === id) || {}).name || '';
+      const name = prompt('Enter the new name here:', old);
+      if (name === null) return;
+      if (!name.trim()) { toast('Face name cannot be empty', 'err'); return; }
+      const resp = await apiText(sdkUrl('/api-sdk/rename_face') + '&oldname=' + encodeURIComponent(old) + '&id=' + encodeURIComponent(id) + '&newname=' + encodeURIComponent(name.trim()));
+      toast(resp || 'Face renamed');
+      refreshFaceList();
+    }
+    async function deleteFace() {
+      if (!state.faces.length) { toast('You must register a face first.', 'warn'); return; }
+      const id = $('faceList').value;
+      const resp = await apiText(sdkUrl('/api-sdk/delete_face') + '&id=' + encodeURIComponent(id));
+      toast(resp || 'Face deleted');
+      refreshFaceList();
     }
 
     /* ------------------------------ actions ------------------------------ */
-    function triggerHeyVector() {
+    async function triggerHeyVector() {
       setStatus('heyVectorStatus', 'Triggering Hey Vector...', 'warn');
-      setTimeout(() => {
+      const resp = await apiText(sdkUrl('/api-sdk/trigger_wake_word'), { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' } });
+      if (resp.includes('success') || resp.includes('ok')) {
         setStatus('heyVectorStatus', 'Hey Vector triggered successfully!', 'ok');
-        log('INFO', 'sdk: wake word triggered on ' + state.robots[state.activeRobot].esn);
-        setTimeout(() => setStatus('heyVectorStatus', ''), 4000);
-      }, 900);
+      } else {
+        setStatus('heyVectorStatus', resp || 'Failed to trigger wake word', 'err');
+      }
+      setTimeout(() => setStatus('heyVectorStatus', ''), 5000);
     }
 
     /* ------------------------------ control ------------------------------ */
@@ -2248,110 +2872,231 @@
       if (!assume) {
         state.sdk.keyControl = false;
         $('key_control_off').checked = true;
+        sendForm('/api-sdk/mirror_mode?enable=false');
         $('mirror_off').checked = true;
         state.sdk.mirror = false;
         setMotor('motorLW', 0); setMotor('motorRW', 0); setMotor('motorLift', 0); setMotor('motorHead', 0);
       }
-      log('INFO', 'sdk: behavior control ' + (assume ? 'assumed (priority high)' : 'released'));
-      toast(assume ? 'Behavior control assumed' : 'Behavior control released');
     }
     function toggleKeyboard(on) {
       state.sdk.keyControl = !!on;
-      toast('Keyboard control ' + (on ? 'enabled - use WASD / R F / T G' : 'disabled'));
     }
-    function setMirror(on) { state.sdk.mirror = on; toast('Mirror mode ' + (on ? 'on' : 'off')); log('INFO', 'sdk: mirror mode ' + on); }
+    function setMirror(on) { state.sdk.mirror = on; sendForm('/api-sdk/mirror_mode?enable=' + (on ? 'true' : 'false')); }
     function setMotor(id, value) { $(id).textContent = String(value); }
-    function sayText() {
+    async function sayText() {
       const text = $('textSay').value.trim();
       if (!text) { toast('Enter text first', 'warn'); return; }
-      toast('Vector says: "' + text + '" (simulated)');
-      log('INFO', 'sdk: say_text "' + text + '"');
-    }
-    function loadAudio() {
-      const file = $('fileInput').files[0];
-      if (!file) return;
-      $('audioOutput').src = URL.createObjectURL(file);
-      toast('Loaded ' + file.name + ' locally');
-      log('INFO', 'sdk: audio file "' + file.name + '" loaded for local preview');
+      await sendForm('/api-sdk/say_text?text=' + encodeURIComponent(text));
+      toast('Say text sent to robot');
     }
     function showCamStream() {
-      const host = $('camStream');
-      $('camState').textContent = 'streaming (mock)';
-      host.innerHTML = '<canvas id="camCanvas"></canvas>';
-      const c = $('camCanvas');
-      const ctx = c.getContext('2d');
-      c.width = 320; c.height = 240;
-      let t = 0;
-      const draw = () => {
-        t += 0.03;
-        const g = ctx.createLinearGradient(0, 0, 320, 240);
-        g.addColorStop(0, 'hsl(' + (160 + Math.sin(t) * 25) + ',45%,14%)');
-        g.addColorStop(1, 'hsl(' + (200 + Math.cos(t) * 30) + ',45%,7%)');
-        ctx.fillStyle = g; ctx.fillRect(0, 0, 320, 240);
-        ctx.strokeStyle = 'rgba(255,255,255,.08)';
-        for (let x = 0; x < 320; x += 32) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x + Math.sin(t + x) * 6, 240); ctx.stroke(); }
-        ctx.fillStyle = 'rgba(255,255,255,.85)';
-        ctx.beginPath(); ctx.arc(160, 118, 34, 0, Math.PI * 2); ctx.fill();
-        ctx.fillStyle = '#0b0e12';
-        ctx.beginPath(); ctx.arc(148, 112, 6, 0, Math.PI * 2); ctx.arc(172, 112, 6, 0, Math.PI * 2); ctx.fill();
-        ctx.strokeStyle = '#0b0e12'; ctx.lineWidth = 3;
-        ctx.beginPath(); ctx.arc(160, 126, 12, 0.2, Math.PI - 0.2); ctx.stroke();
-        const scanY = (t * 60) % 240;
-        ctx.fillStyle = 'rgba(255,255,255,.05)'; ctx.fillRect(0, scanY, 320, 18);
-        ctx.fillStyle = 'rgba(255,255,255,.7)'; ctx.font = '11px monospace';
-        ctx.fillText('VECTOR CAM · MOCK · ' + nowTime(), 8, 232);
-        state.cam.raf = requestAnimationFrame(draw);
-      };
-      draw();
-      log('INFO', 'sdk: camera stream started (mock)');
+      $('camState').textContent = 'streaming';
+      const img = document.createElement('img');
+      img.src = '/cam-stream?serial=' + encodeURIComponent(activeEsn());
+      img.alt = 'Vector camera stream';
+      img.style.width = '100%';
+      img.style.height = '100%';
+      img.style.objectFit = 'cover';
+      img.style.display = 'block';
+      $('camStream').innerHTML = '';
+      $('camStream').appendChild(img);
+      state.cam.img = img;
     }
     function stopCamStream() {
-      if (state.cam.raf) cancelAnimationFrame(state.cam.raf);
-      state.cam.raf = null;
-      const host = $('camStream');
-      if (host) host.innerHTML = 'no signal · press "Begin camera stream"';
       $('camState').textContent = 'stopped';
+      sendForm('/api-sdk/stop_cam_stream', function () { });
+      state.cam.img = null;
+      $('camStream').innerHTML = 'no signal · press "Begin camera stream"';
       if ($('camOff')) $('camOff').checked = true;
-      log('INFO', 'sdk: camera stream stopped');
     }
+    /* motor keyboard - same speeds as the original control.js */
     const keysPressed = { w: false, a: false, s: false, d: false, r: false, f: false, t: false, g: false };
+    let isMovingFL = false, isMovingFR = false, isMovingBL = false, isMovingBR = false;
+    let isMovingForward = false, isMovingBack = false, isMovingLeft = false, isMovingRight = false;
+    let liftIsMovingDown = false, liftIsMovingUp = false, headIsMovingDown = false, headIsMovingUp = false;
     function sendControlRequests() {
       if (!state.sdk.keyControl) return;
       const k = keysPressed;
       let lw = 0, rw = 0;
-      if (k.w && !k.a && !k.s && !k.d) { lw = 140; rw = 140; }
-      else if (k.w && k.a) { lw = 100; rw = 190; }
-      else if (k.w && k.d) { lw = 190; rw = 100; }
-      else if (k.s && !k.a && !k.d) { lw = -150; rw = -150; }
-      else if (k.s && k.a) { lw = -100; rw = 190; }
-      else if (k.s && k.d) { lw = -190; rw = 100; }
-      else if (k.a) { lw = -150; rw = 150; }
-      else if (k.d) { lw = 150; rw = -150; }
+      if (k.w && !k.a && !k.s && !k.d) {
+        if (!isMovingForward) { sendForm('/api-sdk/move_wheels?lw=140&rw=140', function () { }); }
+        isMovingForward = true; isMovingFL = false; isMovingFR = false; isMovingBL = false; isMovingBR = false;
+        isMovingBack = false; isMovingLeft = false; isMovingRight = false;
+        lw = 140; rw = 140;
+      } else if (k.w && k.a) {
+        if (!isMovingFL) { sendForm('/api-sdk/move_wheels?lw=100&rw=190', function () { }); }
+        isMovingFL = true; isMovingForward = false; isMovingFR = false; isMovingBL = false; isMovingBR = false;
+        isMovingBack = false; isMovingLeft = false; isMovingRight = false;
+        lw = 100; rw = 190;
+      } else if (k.w && k.d) {
+        if (!isMovingFR) { sendForm('/api-sdk/move_wheels?lw=190&rw=100', function () { }); }
+        isMovingFR = true; isMovingForward = false; isMovingFL = false; isMovingBL = false; isMovingBR = false;
+        isMovingBack = false; isMovingLeft = false; isMovingRight = false;
+        lw = 190; rw = 100;
+      } else if (k.s && !k.a && !k.d) {
+        if (!isMovingBack) { sendForm('/api-sdk/move_wheels?lw=-150&rw=-150', function () { }); }
+        isMovingBack = true; isMovingForward = false; isMovingFL = false; isMovingFR = false; isMovingBL = false; isMovingBR = false;
+        isMovingLeft = false; isMovingRight = false;
+        lw = -150; rw = -150;
+      } else if (k.s && k.a) {
+        if (!isMovingBL) { sendForm('/api-sdk/move_wheels?lw=-100&rw=190', function () { }); }
+        isMovingBL = true; isMovingForward = false; isMovingFL = false; isMovingFR = false; isMovingBack = false; isMovingBR = false;
+        isMovingLeft = false; isMovingRight = false;
+        lw = -100; rw = 190;
+      } else if (k.s && k.d) {
+        if (!isMovingBR) { sendForm('/api-sdk/move_wheels?lw=-190&rw=100', function () { }); }
+        isMovingBR = true; isMovingForward = false; isMovingFL = false; isMovingFR = false; isMovingBL = false; isMovingBack = false;
+        isMovingLeft = false; isMovingRight = false;
+        lw = -190; rw = 100;
+      } else if (k.a) {
+        if (!isMovingLeft) { sendForm('/api-sdk/move_wheels?lw=-150&rw=150', function () { }); }
+        isMovingLeft = true; isMovingForward = false; isMovingFL = false; isMovingFR = false; isMovingBL = false; isMovingBR = false;
+        isMovingBack = false; isMovingRight = false;
+        lw = -150; rw = 150;
+      } else if (k.d) {
+        if (!isMovingRight) { sendForm('/api-sdk/move_wheels?lw=150&rw=-150', function () { }); }
+        isMovingRight = true; isMovingForward = false; isMovingFL = false; isMovingFR = false; isMovingBL = false; isMovingBR = false;
+        isMovingBack = false; isMovingLeft = false;
+        lw = 150; rw = -150;
+      } else {
+        sendForm('/api-sdk/move_wheels?lw=0&rw=0', function () { });
+        isMovingForward = false; isMovingFL = false; isMovingFR = false; isMovingBL = false; isMovingBR = false;
+        isMovingBack = false; isMovingLeft = false; isMovingRight = false;
+      }
       setMotor('motorLW', lw); setMotor('motorRW', rw);
-      const lift = k.r && !k.f ? 2 : k.f && !k.r ? -2 : 0;
-      const head = k.t && !k.g ? 2 : k.g && !k.t ? -2 : 0;
-      setMotor('motorLift', lift); setMotor('motorHead', head);
+      if (!k.r && !k.f) {
+        sendForm('/api-sdk/move_lift?speed=0', function () { });
+        liftIsMovingDown = false; liftIsMovingUp = false;
+        setMotor('motorLift', 0);
+      } else if (k.r && !k.f) {
+        if (!liftIsMovingUp) { sendForm('/api-sdk/move_lift?speed=2', function () { }); }
+        liftIsMovingUp = true; liftIsMovingDown = false;
+        setMotor('motorLift', 2);
+      } else if (k.f && !k.r) {
+        if (!liftIsMovingDown) { sendForm('/api-sdk/move_lift?speed=-2', function () { }); }
+        liftIsMovingDown = true; liftIsMovingUp = false;
+        setMotor('motorLift', -2);
+      }
+      if (!k.t && !k.g) {
+        sendForm('/api-sdk/move_head?speed=0', function () { });
+        headIsMovingDown = false; headIsMovingUp = false;
+        setMotor('motorHead', 0);
+      } else if (k.t && !k.g) {
+        if (!headIsMovingUp) { sendForm('/api-sdk/move_head?speed=2', function () { }); }
+        headIsMovingUp = true; headIsMovingDown = false;
+        setMotor('motorHead', 2);
+      } else if (k.g && !k.t) {
+        if (!headIsMovingDown) { sendForm('/api-sdk/move_head?speed=-2', function () { }); }
+        headIsMovingDown = true; headIsMovingUp = false;
+        setMotor('motorHead', -2);
+      }
+    }
+    /* audio - same client-side pipeline as the original play_audio.js */
+    let processedAudioBlob = null;
+    async function loadAudio() {
+      const fileInput = $('fileInput');
+      if (!fileInput.files.length) { toast('Please, select a WAV file', 'warn'); return; }
+      const file = fileInput.files[0];
+      const arrayBuffer = await file.arrayBuffer();
+      const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+      try {
+        const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
+        let newBuffer;
+        if (audioBuffer.numberOfChannels > 1) {
+          const monoLength = audioBuffer.length;
+          newBuffer = audioContext.createBuffer(1, monoLength, audioBuffer.sampleRate);
+          const channelData = newBuffer.getChannelData(0);
+          for (let i = 0; i < monoLength; i++) {
+            channelData[i] = 0.5 * (audioBuffer.getChannelData(0)[i] + audioBuffer.getChannelData(1)[i]);
+          }
+        } else {
+          newBuffer = audioBuffer;
+        }
+        const newSampleRate = 8000;
+        const newLength = Math.round(newBuffer.length * newSampleRate / newBuffer.sampleRate);
+        const resampledBuffer = audioContext.createBuffer(newBuffer.numberOfChannels, newLength, newSampleRate);
+        for (let channel = 0; channel < newBuffer.numberOfChannels; channel++) {
+          const oldData = newBuffer.getChannelData(channel);
+          const newData = resampledBuffer.getChannelData(channel);
+          for (let i = 0; i < newLength; i++) {
+            const oldIndex = i * newBuffer.sampleRate / newSampleRate;
+            const index0 = Math.floor(oldIndex);
+            const index1 = Math.min(index0 + 1, oldData.length - 1);
+            const fraction = oldIndex - index0;
+            newData[i] = oldData[index0] * (1 - fraction) + oldData[index1] * fraction;
+          }
+        }
+        processedAudioBlob = await bufferToWave(resampledBuffer);
+        const url = URL.createObjectURL(processedAudioBlob);
+        $('audioOutput').src = url;
+        $('audioOutput').play();
+        $('uploadButton').style.display = 'inline-flex';
+        toast('Audio processed (8 kHz mono WAV) - press "Send audio to Vector"');
+      } catch (error) {
+        toast('Error processing the file: ' + error, 'err');
+      }
+    }
+    function bufferToWave(abuffer) {
+      const numOfChannels = abuffer.numberOfChannels;
+      const length = abuffer.length * numOfChannels * 2 + 44;
+      const buffer = new ArrayBuffer(length);
+      const view = new DataView(buffer);
+      let offset = 0;
+      const setString = (v, o, s) => { for (let i = 0; i < s.length; i++) v.setUint8(o + i, s.charCodeAt(i)); };
+      setString(view, offset, 'RIFF'); offset += 4;
+      view.setUint32(offset, length - 8, true); offset += 4;
+      setString(view, offset, 'WAVE'); offset += 4;
+      setString(view, offset, 'fmt '); offset += 4;
+      view.setUint32(offset, 16, true); offset += 4;
+      view.setUint16(offset, 1, true); offset += 2;
+      view.setUint16(offset, numOfChannels, true); offset += 2;
+      view.setUint32(offset, 8000, true); offset += 4;
+      view.setUint32(offset, 8000 * numOfChannels * 2, true); offset += 4;
+      view.setUint16(offset, numOfChannels * 2, true); offset += 2;
+      view.setUint16(offset, 16, true); offset += 2;
+      setString(view, offset, 'data'); offset += 4;
+      view.setUint32(offset, length - offset - 4, true); offset += 4;
+      for (let channel = 0; channel < numOfChannels; channel++) {
+        const channelData = abuffer.getChannelData(channel);
+        for (let i = 0; i < channelData.length; i++) {
+          view.setInt16(offset, channelData[i] * 0x7FFF, true);
+          offset += 2;
+        }
+      }
+      return new Blob([buffer], { type: 'audio/wav' });
+    }
+    async function uploadAudio() {
+      if (!processedAudioBlob) { toast('No processed audio to send.', 'warn'); return; }
+      if (!state.robots.length) { toast('No robot connected yet.', 'warn'); return; }
+      const formData = new FormData();
+      formData.append('sound', processedAudioBlob, 'processed.wav');
+      try {
+        const response = await apiFetch('/api-sdk/play_sound?serial=' + encodeURIComponent(activeEsn()), { method: 'POST', body: formData });
+        if (!response.ok) throw new Error(response.statusText);
+        toast('Audio sent to robot');
+      } catch (error) {
+        toast('Error sending audio: ' + error, 'err');
+      }
     }
 
-    /* ------------------------------ stim chart ------------------------------ */
+    /* ------------------------------ stim ------------------------------ */
     function startStim() {
       if (state.stim.running) return;
       state.stim.running = true;
       $('stimState').textContent = 'streaming';
-      state.stim.data = [];
-      state.stim.timer = setInterval(() => {
-        const last = state.stim.data.length ? state.stim.data[state.stim.data.length - 1] : 0.45;
-        let v = last + (Math.random() - 0.5) * 0.22;
-        v = Math.max(0.02, Math.min(0.98, v));
-        state.stim.data.push(v);
-        if (state.stim.data.length > 12) state.stim.data.shift();
-        drawStim();
+      sendForm('/api-sdk/begin_event_stream', function () { });
+      state.stim.timer = setInterval(async () => {
+        const data = await apiJSON(sdkUrl('/api-sdk/get_stim_status'));
+        if (typeof data === 'number' || typeof data === 'string') {
+          state.stim.data.push(Number(data) || 0);
+          if (state.stim.data.length > 12) state.stim.data.shift();
+          drawStim();
+        }
       }, 500);
-      log('INFO', 'sdk: stimulation event stream started');
     }
     function stopStim() {
       if (state.stim.timer) { clearInterval(state.stim.timer); state.stim.timer = null; }
-      if (state.stim.running) log('INFO', 'sdk: stimulation event stream stopped');
+      if (state.stim.running) sendForm('/api-sdk/stop_event_stream', function () { });
       state.stim.running = false;
       $('stimState').textContent = 'idle';
     }
@@ -2375,23 +3120,20 @@
       }
       if (state.stim.data.length > 1) {
         const step = gw / (state.stim.data.length - 1);
+        const [r, g, b] = hexToRgb(accent);
         ctx.beginPath();
         state.stim.data.forEach((v, i) => {
-          const x = pad + step * i, y = pad + gh * (1 - v);
+          const x = pad + step * i, y = pad + gh * (1 - Math.max(0, Math.min(1, v)));
           i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
         });
         ctx.strokeStyle = accent; ctx.lineWidth = 2; ctx.stroke();
         ctx.lineTo(pad + step * (state.stim.data.length - 1), pad + gh);
         ctx.lineTo(pad, pad + gh); ctx.closePath();
-        ctx.fillStyle = accent.replace(')', ', .12)').replace('rgb', 'rgba');
-        if (accent.startsWith('#')) {
-          const [r, g, b] = hexToRgb(accent);
-          ctx.fillStyle = 'rgba(' + r + ',' + g + ',' + b + ',.12)';
-        }
+        ctx.fillStyle = 'rgba(' + r + ',' + g + ',' + b + ',.12)';
         ctx.fill();
         state.stim.data.forEach((v, i) => {
           ctx.beginPath();
-          ctx.arc(pad + step * i, pad + gh * (1 - v), 3, 0, Math.PI * 2);
+          ctx.arc(pad + step * i, pad + gh * (1 - Math.max(0, Math.min(1, v))), 3, 0, Math.PI * 2);
           ctx.fillStyle = accent; ctx.fill();
         });
       }
@@ -2399,226 +3141,111 @@
     window.addEventListener('resize', () => { if (state.stim.running) drawStim(); });
 
     /* ------------------------------ statistics ------------------------------ */
-    function updateStats(randomize) {
-      const base = { alive: 4857, trigger: 17, features: 2, petMs: 3480, cm: 11148 };
-      const jitter = randomize ? Math.random() : 0;
-      const days = Math.round((base.alive + jitter * 600) / 86400);
+    async function updateStats() {
+      /* same jdoc keys and derivations as the original updateStats() */
+      if (!state.robots.length || state.activeRobot < 0) {
+        $('statsSection').innerHTML = '<div class="note">' + svg('info') + '<div>No robot connected.</div></div>';
+        return;
+      }
+      const jdoc = await apiJSON(sdkUrl('/api-sdk/get_robot_stats'), { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' } });
+      if (!jdoc) return;
+      const days = Math.round(jdoc['Alive.seconds'] / (24 * 60 * 60));
       const rows = [
         ['Days alive', days],
-        ['Reacted to trigger word', base.trigger + Math.round(jitter * 4) + ' times'],
-        ['Utility features used', base.features],
-        ['Seconds petted', Math.round(base.petMs / 1000)],
-        ['Distance moved', Math.round(base.cm / 100) + ' cm']
+        ['Reacted to trigger word', (jdoc['BStat.ReactedToTriggerWord'] || 0) + ' times'],
+        ['Utility features used', jdoc['FeatureType.Utility'] || 0],
+        ['Seconds petted', Math.round((jdoc['Pet.ms'] || 0) / 1000)],
+        ['Distance moved (cm)', Math.round((jdoc['Stim.CumlPosDelta'] || 0) / 100)]
       ];
       $('statsSection').innerHTML = rows.map((r) =>
         '<div class="kv"><span>' + esc(r[0]) + '</span><span>' + esc(r[1]) + '</span></div>'
       ).join('');
-      if (randomize) { toast('Statistics refreshed'); log('DEBUG', 'sdk: robot stats refreshed'); }
     }
 
     /* ------------------------------ photos ------------------------------ */
-    function photoDataUri(label, hue) {
-      const svgImg = '<svg xmlns="http://www.w3.org/2000/svg" width="320" height="240">' +
-        '<defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1">' +
-        '<stop offset="0" stop-color="hsl(' + hue + ',65%,42%)"/><stop offset="1" stop-color="hsl(' + (hue + 45) + ',65%,16%)"/>' +
-        '</linearGradient></defs><rect width="320" height="240" fill="url(#g)"/>' +
-        '<circle cx="160" cy="108" r="40" fill="rgba(255,255,255,.14)"/>' +
-        '<circle cx="146" cy="100" r="7" fill="#fff"/><circle cx="174" cy="100" r="7" fill="#fff"/>' +
-        '<path d="M140 126 q20 18 40 0" stroke="#fff" stroke-width="4" fill="none" stroke-linecap="round"/>' +
-        '<text x="160" y="200" font-family="monospace" font-size="16" fill="rgba(255,255,255,.9)" text-anchor="middle">' + label + '</text>' +
-        '</svg>';
-      return 'data:image/svg+xml;utf8,' + encodeURIComponent(svgImg);
-    }
-    function renderPhotos() {
-      const host = $('photoSection');
-      if (!state.photos.length) {
-        host.innerHTML = '<div class="note">' + svg('camera') + '<div>No photos found. Tell Vector to take a photo, then refresh the list.</div></div>';
+    async function getPhotos() {
+      const resp = await apiText(sdkUrl('/api-sdk/get_image_ids'), { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' } });
+      if (resp.trim() === 'null' || !resp.trim()) {
+        state.photos = [];
+        $('photoSection').innerHTML = '<div class="note">' + svg('camera') + '<div>No photos found. Tell Vector to take a photo, then refresh the list.</div></div>';
+        renderHome();
         return;
       }
-      host.innerHTML = '<div class="photo-grid">' + state.photos.map((p) =>
-        '<div class="photo"><img alt="' + esc(p.label) + '" src="' + photoDataUri(p.label, p.hue) + '" />' +
-        '<div class="cap"><small>' + esc(p.label) + '</small>' +
-        '<button class="btn sm danger" onclick="deletePhoto(\'' + p.id + '\')">' + svg('trash') + 'Delete</button></div></div>'
+      try {
+        const ids = JSON.parse(resp);
+        state.photos = Array.isArray(ids) ? ids : [];
+      } catch (e) {
+        state.photos = [];
+      }
+      if (!state.photos.length) {
+        $('photoSection').innerHTML = '<div class="note">' + svg('camera') + '<div>No photos found. Tell Vector to take a photo, then refresh the list.</div></div>';
+        renderHome();
+        return;
+      }
+      const esn = encodeURIComponent(activeEsn());
+      $('photoSection').innerHTML = '<div class="photo-grid">' + state.photos.map((id) =>
+        '<div class="photo"><a href="/api-sdk/get_image?serial=' + esn + '&id=' + encodeURIComponent(id) + '" target="_blank" rel="noreferrer">' +
+        '<img alt="photo ' + esc(id) + '" src="/api-sdk/get_image_thumb?serial=' + esn + '&id=' + encodeURIComponent(id) + '" /></a>' +
+        '<div class="cap"><small>' + esc(id) + '</small>' +
+        '<button class="btn sm danger" onclick="deletePhoto(\'' + esc(id) + '\')">' + svg('trash') + 'Delete</button></div></div>'
       ).join('') + '</div>';
+      renderHome();
     }
-    function deletePhoto(id) {
+    async function deletePhoto(id) {
       if (!confirm('Are you sure?')) return;
-      state.photos = state.photos.filter((p) => p.id !== id);
-      toast('Photo deleted');
-      log('INFO', 'sdk: photo ' + id + ' deleted');
-      renderPhotos(); renderHome();
+      await apiText(sdkUrl('/api-sdk/delete_image') + '&id=' + encodeURIComponent(id), { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' } });
+      getPhotos();
     }
 
     /* ------------------------------ alexa / location / timezone ------------------------------ */
-    function alexaAuth(signIn) {
-      state.sdk.alexa = signIn;
-      setStatus('alexaMsg', signIn ? 'Signed in to Alexa (simulated).' : 'Signed out of Alexa (simulated).', signIn ? 'ok' : 'warn');
-      toast(signIn ? 'Signed in to Alexa' : 'Signed out of Alexa');
-      log('INFO', 'sdk: alexa ' + (signIn ? 'sign in' : 'sign out'));
-      renderSettingsReadouts();
+    async function alexaAuth(signIn) {
+      const resp = await sendForm(signIn ? '/api-sdk/alexa_sign_in' : '/api-sdk/alexa_sign_out');
+      setStatus('alexaMsg', resp || (signIn ? 'Sign-in request sent.' : 'Sign-out request sent.'), resp && resp.includes('rror') ? 'err' : 'ok');
+      toast(resp || (signIn ? 'Signed in to Alexa' : 'Signed out of Alexa'));
     }
-    function sendLocation() {
-      const value = $('locationInput').value.trim();
-      if (!value) { setStatus('locationStatus', 'Location cannot be blank.', 'err'); toast('Location cannot be blank', 'err'); return; }
-      state.sdk.location = value;
-      $('locationInput').value = '';
-      setStatus('locationStatus', 'Location set to ' + value + ' (demo only).', 'ok');
-      toast('Location updated');
-      log('INFO', 'sdk: location set to ' + value);
-      renderSettingsReadouts();
+    async function sendLocation() {
+      const value = $('locationInput').value;
+      if (!value) { toast('Location cannot be blank.', 'err'); return; }
+      await sendForm('/api-sdk/location?location=' + encodeURIComponent(value));
+      setStatus('locationStatus', 'Location sent to the robot.', 'ok');
     }
-    function sendTimeZone() {
+    async function sendTimeZone() {
       const value = $('tzInput').value;
-      if (!value) { setStatus('tzStatus', 'Time zone cannot be blank.', 'err'); return; }
-      state.sdk.timezone = value;
-      setStatus('tzStatus', 'Time zone set to ' + value + ' (demo only).', 'ok');
-      toast('Time zone updated');
-      log('INFO', 'sdk: timezone set to ' + value);
-      renderSettingsReadouts();
+      if (!value) { toast('Time zone cannot be blank.', 'err'); return; }
+      await sendForm('/api-sdk/timezone?timezone=' + encodeURIComponent(value));
+      setStatus('tzStatus', 'Time zone sent to the robot.', 'ok');
     }
 
-    /* ------------------------------ initial setup (first run) ------------------------------ */
-    function checkConn() {
-      $('portViz').style.display = $('connSelection').value === 'ip' ? 'flex' : 'none';
+    /* ------------------------------ home ------------------------------ */
+    function formatUptime(ms) {
+      const s = Math.floor(ms / 1000), h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60);
+      return h + 'h ' + String(m).padStart(2, '0') + 'm ' + String(s % 60).padStart(2, '0') + 's';
     }
-    function checkLanguage() {
-      const provider = $('initialProvider').value;
-      if (provider === 'vosk' || provider === 'whisper.cpp') {
-        $('languageSelectionDiv').style.display = 'flex';
-        setStatus('initialLanguageStatus', 'The language model will be downloaded for ' + provider + '.', 'ok');
-      } else {
-        $('languageSelectionDiv').style.display = 'none';
-        setStatus('initialLanguageStatus', "To set the STT language, the provider must be Vosk or Whisper. The current one is '" + provider + "'.", 'warn');
-      }
-    }
-    function initialGoTo(step) {
-      step = Math.max(1, Math.min(3, step));
-      state.initial.step = step;
-      [1, 2, 3].forEach((i) => { $('wizard-step-' + i).style.display = i === step ? 'block' : 'none'; });
-      document.querySelectorAll('#initialSteps .step').forEach((el) => {
-        const n = Number(el.dataset.step);
-        el.classList.toggle('active', n === step);
-        el.classList.toggle('done', n < step);
-      });
-      $('initialBackBtn').style.display = step === 1 ? 'none' : 'inline-flex';
-      $('initialNextBtn').innerHTML = step === 3 ? svg('check') + 'Submit settings' : 'Next';
-      if (step === 3) renderInitialReview();
-    }
-    function initialNext() {
-      if (state.initial.step < 3) { initialGoTo(state.initial.step + 1); return; }
-      submitInitialSetup();
-    }
-    function initialBack() { initialGoTo(state.initial.step - 1); }
-    function renderInitialReview() {
-      const conn = $('connSelection').value;
-      const provider = $('initialProvider').value;
-      $('reviewConn').textContent = conn === 'ep' ? 'Escape Pod (ep)' : 'IP address (ip)';
-      $('reviewPort').textContent = conn === 'ip' ? ($('portInput').value || '443') : '-';
-      $('reviewProvider').textContent = provider;
-      $('reviewLanguage').textContent = (provider === 'vosk' || provider === 'whisper.cpp') ? $('languageSelection').value : 'not set';
-    }
-    function submitInitialSetup() {
-      if (state.initial.running) return;
-      state.initial.running = true;
-      const provider = $('initialProvider').value;
-      const language = $('languageSelection').value;
-      const conn = $('connSelection').value;
-      const port = $('portInput').value || '443';
-
-      $('initialActions').style.display = 'none';
-      $('initialDone').style.display = 'none';
-      $('initialBarWrap').style.display = 'block';
-      $('initialBar').style.width = '0%';
-      setStatus('initialStatus', 'Initiating setup...', 'warn');
-      log('INFO', 'initial: starting first-time setup');
-
-      const finish = () => {
-        setStatus('initialStatus', 'Setting connection type (' + conn + ')...', 'warn');
-        setTimeout(() => {
-          state.initial.pastSetup = true;
-          state.initial.conn = conn;
-          state.initial.port = port;
-          if (provider === 'vosk' || provider === 'whisper.cpp') {
-            state.stt.provider = provider;
-            state.stt.language = language;
-          }
-          $('initialBar').style.width = '100%';
-          setStatus('initialStatus', 'Setup is complete! Wire-pod has started. Redirecting to main page...', 'ok');
-          log('INFO', 'initial: language set to ' + state.stt.language);
-          log('INFO', 'initial: connection method set to ' + conn + (conn === 'ip' ? ' (port ' + port + ')' : ''));
-          log('INFO', 'wire-pod: setup complete');
-          toast('Wire-Pod setup complete (simulated)');
-          state.initial.running = false;
-          $('initialDone').style.display = 'flex';
-          renderInitialState();
-          renderSettingsReadouts();
-          renderHome();
-          setTimeout(() => {
-            initialGoTo(1);
-            $('initialActions').style.display = 'flex';
-            $('initialDone').style.display = 'none';
-            $('initialBarWrap').style.display = 'none';
-            $('initialBar').style.width = '0%';
-            setStatus('initialStatus', '');
-            showSection('home');
-          }, 2600);
-        }, 1100);
-      };
-
-      const downloadLanguage = () => {
-        if (provider !== 'vosk' && provider !== 'whisper.cpp') { finish(); return; }
-        let p = 0;
-        setStatus('initialStatus', 'Downloading language model...', 'warn');
-        const t = setInterval(() => {
-          p += 8;
-          $('initialBar').style.width = Math.min(p, 100) + '%';
-          setStatus('initialStatus', 'Downloading language model... ' + Math.min(p, 100) + '%', 'warn');
-          if (p >= 100) { clearInterval(t); finish(); }
-        }, 160);
-      };
-      setTimeout(downloadLanguage, 500);
-    }
-    function resetFirstRun() {
-      state.initial.pastSetup = false;
-      state.initial.running = false;
-      initialGoTo(1);
-      $('initialActions').style.display = 'flex';
-      $('initialDone').style.display = 'none';
-      $('initialBarWrap').style.display = 'none';
-      $('initialBar').style.width = '0%';
-      setStatus('initialStatus', 'Wire-pod is not set up. Finish the wizard to complete the first-time setup.', 'warn');
-      toast('Simulating a fresh wire-pod install', 'warn');
-      log('WARN', 'wire-pod is not setup. Use the webserver at port 8080 to set up wire-pod.');
-      renderInitialState();
-      renderHome();
-      showSection('initial');
-    }
-    function directToIndex() {
-      showSection('home');
-      toast('Returned to the main page');
-    }
-    function renderInitialState() {
-      if (!$('initialStateBadge')) return;
-      $('initialStateBadge').textContent = state.initial.pastSetup ? 'completed' : 'setup required';
-      $('initialPastSetup').textContent = state.initial.pastSetup ? 'yes' : 'no';
-      $('initialConnState').textContent = state.initial.pastSetup
-        ? (state.initial.conn === 'ep' ? 'Escape Pod (ep)' : 'IP address (ip) · port ' + state.initial.port)
-        : '-';
-      $('initialSttState').textContent = state.stt.provider + ' · ' + state.stt.language;
+    function renderHome() {
       renderHomeBanner();
-    }
-    function renderHomeBanner() {
-      const host = $('homeBanner');
-      if (!host) return;
-      if (state.initial.pastSetup) { host.innerHTML = ''; return; }
-      host.innerHTML =
-        '<div class="note warn" style="margin-bottom:16px">' + svg('info') +
-        '<div><b>Wire-Pod is not set up.</b> The real UI redirects to the initial setup page until first-time setup is finished. ' +
-        'Run the wizard to continue.<div style="margin-top:9px">' +
-        '<button class="btn sm primary" onclick="showSection(\'initial\')">' + svg('power') + 'Open initial setup</button></div></div></div>';
+      $('homeUptime').textContent = formatUptime(Date.now() - state.startedAt);
+      $('homeIntents').textContent = String(state.intents.length);
+      $('homeLogs').textContent = state.logLines ? String(state.logLines) : '—';
+      const tiles = [
+        ['botauth', 'robot', 'Bot Setup', 'pair over BLE'],
+        ['intents', 'mic', 'Custom Intents', state.intents.length + ' on server'],
+        ['control', 'gamepad', 'Control', 'camera · motors'],
+        ['volume', 'volume', 'Volume', VOLUMES[state.sdk.volume] || '-'],
+        ['eyes', 'eye', 'Eye Color', state.sdk.customEye ? 'Custom' : (EYE_COLORS[state.sdk.eyeColor] || {}).name || '-'],
+        ['actions', 'run', 'Actions', 'quick commands'],
+        ['photos', 'images', 'Photos', 'from the robot'],
+        ['stats', 'chart', 'Statistics', 'robot stats'],
+        ['weather', 'cloud-sun', 'Weather', state.weather.provider || 'not set'],
+        ['kg', 'graph', 'Knowledge Graph', state.kg.provider || 'not set'],
+        ['language', 'globe', 'STT Language', state.stt.language || '-'],
+        ['log', 'terminal', 'Log', 'live stream']
+      ];
+      $('homeTiles').innerHTML = tiles.map((t) =>
+        '<div class="tile" onclick="showSection(\'' + t[0] + '\')">' + svg(t[1]) + '<b>' + esc(t[2]) + '</b><small>' + esc(t[3]) + '</small></div>'
+      ).join('');
     }
 
-    /* ------------------------------ boot ------------------------------ */
+    /* ------------------------------ clock ------------------------------ */
     function startClock() {
       const tick = () => {
         const d = new Date();
@@ -2629,43 +3256,11 @@
       tick();
       setInterval(tick, 1000);
     }
-    function boot() {
-      $('accent-color-choose').innerHTML = Object.keys(ACCENTS).map((k) => '<option value="' + k + '">' + ACCENTS[k].label + '</option>').join('');
-      $('body-font-choose').innerHTML = Object.keys(FONTS).map((k) => '<option value="' + k + '">' + FONTS[k].label + '</option>').join('');
-      renderNav();
-      applyUI();
-      buildSdkControls();
-      renderBots();
-      renderIntentList();
-      createIntentSelect('intentAddSelect');
-      refreshFaceList();
-      renderPhotos();
-      renderSettingsReadouts();
-      updateCustomEyePreview();
-      checkWeather();
-      checkKG();
-      document.addEventListener('keydown', (e) => {
-        const k = e.key.toLowerCase();
-        if (k in keysPressed) { keysPressed[k] = true; sendControlRequests(); }
-      });
-      document.addEventListener('keyup', (e) => {
-        const k = e.key.toLowerCase();
-        if (k in keysPressed) { keysPressed[k] = false; sendControlRequests(); }
-      });
-      $('textSay').addEventListener('focus', () => { $('key_control_off').checked = true; state.sdk.keyControl = false; });
-      log('INFO', 'wire-pod: web UI ready (mock mode, no backend)');
-      log('INFO', 'sdk: ' + state.robots.length + ' robots in registry');
-      checkConn();
-      checkLanguage();
-      initialGoTo(1);
-      setStatus('initialStatus', '');
-      renderInitialState();
-      showSection('home');
-      if (location.hash === '#initial' || /(^|[?&])initial(=|&|$)/.test(location.search)) showSection('initial');
-      startClock();
-    }
-    window.addEventListener('beforeunload', () => { if (state.cam.raf) cancelAnimationFrame(state.cam.raf); });
+    window.addEventListener('beforeunload', () => {
+      if (state.cam.img) sendForm('/api-sdk/stop_cam_stream', function () { });
+    });
     boot();
+
   </script>
 </body>
 
