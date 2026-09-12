@@ -109,14 +109,14 @@ function getPackages() {
     if [[ ${TARGET} != "darwin" ]] && [[ ${TARGET} != "arch" ]]; then
         if [[ ! -f /usr/local/go/bin/go ]]; then
             if [[ ${ARCH} == "x86_64" ]]; then
-                wget -q --show-progress --no-check-certificate https://go.dev/dl/go1.22.4.linux-amd64.tar.gz
-                rm -rf /usr/local/go && tar -C /usr/local -xzf go1.22.4.linux-amd64.tar.gz
+                wget -q --show-progress --no-check-certificate https://go.dev/dl/go1.27.1.linux-amd64.tar.gz
+                rm -rf /usr/local/go && tar -C /usr/local -xzf go1.27.1.linux-amd64.tar.gz
                 elif [[ ${ARCH} == "aarch64" ]]; then
-                wget -q --show-progress --no-check-certificate https://go.dev/dl/go1.22.4.linux-arm64.tar.gz
-                rm -rf /usr/local/go && tar -C /usr/local -xzf go1.22.4.linux-arm64.tar.gz
+                wget -q --show-progress --no-check-certificate https://go.dev/dl/go1.27.1.linux-arm64.tar.gz
+                rm -rf /usr/local/go && tar -C /usr/local -xzf go1.27.1.linux-arm64.tar.gz
                 elif [[ ${ARCH} == "armv7l" ]]; then
-                wget -q --show-progress --no-check-certificate https://go.dev/dl/go1.22.4.linux-armv6l.tar.gz
-                rm -rf /usr/local/go && tar -C /usr/local -xzf go1.22.4.linux-armv6l.tar.gz
+                wget -q --show-progress --no-check-certificate https://go.dev/dl/go1.27.1.linux-armv6l.tar.gz
+                rm -rf /usr/local/go && tar -C /usr/local -xzf go1.27.1.linux-armv6l.tar.gz
             fi
 	    if [[ ! -f /usr/bin/go ]] && [[ ! -e /usr/bin/go ]]; then
                 ln -s /usr/local/go/bin/go /usr/bin/go
