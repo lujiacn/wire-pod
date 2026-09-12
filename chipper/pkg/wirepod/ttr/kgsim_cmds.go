@@ -208,7 +208,7 @@ func ModelIsSupported(cmd LLMCommand, model string) bool {
 
 func CreatePrompt(origPrompt string, model string, isKG bool) string {
 	prompt := origPrompt + "\n\n" + "Keep in mind, user input comes from speech-to-text software, so respond accordingly. No special characters like ampersand, caret, asterisk, hash or at sign. Always use normal sentence punctuation and end every sentence with a period, question mark or exclamation mark. No lists. No formatting. No emoji."
-	prompt = prompt + "\n\n" + "The user may speak in any language. Always try to understand the user's input no matter which language it is in, but ALWAYS respond in English only, because the robot's speech engine can only speak English and must be able to follow your response with animations and actions. Never reply in any other language."
+	prompt = prompt + "\n\n" + QwenTTSLanguageInstruction()
 	prompt = prompt + "\n\n" + "Today's date is " + time.Now().Format("Monday, January 2, 2006") + "."
 	if vars.APIConfig.Knowledge.CommandsEnable {
 		prompt = prompt + "\n\n" + "You are running ON an Anki Vector robot. You have a set of commands. If you include an emoji, I will make you start over. If you want to use a command but it doesn't exist or your desired parameter isn't in the list, avoid using the command. The format is {{command||parameter}}. You can embed these in sentences. Example: \"User: How are you feeling? | Response: \"{{playAnimationWI||sad}} I'm feeling sad...\". Square brackets ([]) are not valid.\n\nUse the playAnimation or playAnimationWI commands if you want to express emotion! You are very animated and good at following instructions. Animation takes precendence over words. You are to include many animations in your response.\n\nHere is every valid command:"
@@ -549,7 +549,21 @@ func DoTurn(param string, robot *vector.Vector) error {
 
 func DoSayText(input string, robot *vector.Vector) error {
 	// just before vector speaks
-	removeSpecialCharacters(input)
+	input = removeSpecialCharacters(input)
+
+	// Qwen3-TTS (DashScope): API-based speech so the robot can speak Chinese.
+	// In "auto" mode only text containing Chinese characters uses it, so
+	// English keeps the robot's built-in Vector voice.
+	if QwenTTSActive() {
+		if vars.APIConfig.TTS.Mode == "all" || containsCJK(input) {
+			err := DoSayText_Qwen(robot, input)
+			if err == nil {
+				return nil
+			}
+			logger.Println("(Qwen TTS) error, falling back to robot voice: " + err.Error())
+			logger.LogUI("(Qwen TTS) error, falling back to robot voice: " + err.Error())
+		}
+	}
 
 	if (vars.APIConfig.STT.Language != "en-US" && vars.APIConfig.Knowledge.Provider == "openai") || vars.APIConfig.Knowledge.OpenAIVoiceWithEnglish {
 		err := DoSayText_OpenAI(robot, input)

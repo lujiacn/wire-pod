@@ -43,6 +43,10 @@ func apiHandler(w http.ResponseWriter, r *http.Request) {
 		handleSetKGAPI(w, r)
 	case "get_kg_api":
 		handleGetKGAPI(w)
+	case "set_tts_api":
+		handleSetTTSAPI(w, r)
+	case "get_tts_api":
+		handleGetTTSAPI(w)
 	case "set_stt_info":
 		handleSetSTTInfo(w, r)
 	case "get_download_status":
@@ -215,6 +219,44 @@ func handleSetKGAPI(w http.ResponseWriter, r *http.Request) {
 func handleGetKGAPI(w http.ResponseWriter) {
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(vars.APIConfig.Knowledge)
+}
+
+func handleSetTTSAPI(w http.ResponseWriter, r *http.Request) {
+	var config struct {
+		Service      string `json:"service"`
+		Key          string `json:"key"`
+		Model        string `json:"model"`
+		Voice        string `json:"voice"`
+		Region       string `json:"region"`
+		Mode         string `json:"mode"`
+		Instructions string `json:"instructions"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&config); err != nil {
+		http.Error(w, "invalid request body", http.StatusBadRequest)
+		return
+	}
+	if config.Service != "" && config.Service != "qwen" {
+		http.Error(w, "unknown TTS service (supported: qwen)", http.StatusBadRequest)
+		return
+	}
+	if config.Mode != "all" {
+		// default and unknown values fall back to auto
+		config.Mode = "auto"
+	}
+	vars.APIConfig.TTS.Service = config.Service
+	vars.APIConfig.TTS.Key = strings.TrimSpace(config.Key)
+	vars.APIConfig.TTS.Model = strings.TrimSpace(config.Model)
+	vars.APIConfig.TTS.Voice = strings.TrimSpace(config.Voice)
+	vars.APIConfig.TTS.Region = strings.TrimSpace(config.Region)
+	vars.APIConfig.TTS.Mode = config.Mode
+	vars.APIConfig.TTS.Instructions = config.Instructions
+	vars.WriteConfigToDisk()
+	fmt.Fprint(w, "Changes successfully applied.")
+}
+
+func handleGetTTSAPI(w http.ResponseWriter) {
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(vars.APIConfig.TTS)
 }
 
 func handleSetSTTInfo(w http.ResponseWriter, r *http.Request) {

@@ -48,6 +48,21 @@ type apiConfig struct {
 		WhisperKey      string `json:"whisper_key"`
 		WhisperModel    string `json:"whisper_model"`
 	} `json:"STT"`
+	// speech synthesis (text-to-speech) settings; the robot's built-in voice
+	// engine can only speak English, so an API service is needed for Chinese
+	TTS struct {
+		Service string `json:"service"` // "" (off, robot built-in voice) or "qwen" (Qwen3-TTS via DashScope)
+		Key     string `json:"key"`     // DashScope API key
+		Model   string `json:"model"`   // e.g. qwen3-tts-flash or qwen3-tts-instruct-flash
+		Voice   string `json:"voice"`   // e.g. Momo, Cherry, Serena, Ethan, Chelsie, Vivian, Moon
+		// "cn" = dashscope.aliyuncs.com (mainland China), "intl" = dashscope-intl.aliyuncs.com
+		Region string `json:"region"`
+		// "auto" = only speak text containing Chinese via the API (English keeps
+		// the robot's built-in voice), "all" = use the API voice for every response
+		Mode string `json:"mode"`
+		// instruction control, only used by qwen3-tts-instruct-flash
+		Instructions string `json:"instructions"`
+	} `json:"TTS"`
 	Server struct {
 		// false for ip, true for escape pod
 		EPConfig bool   `json:"epconfig"`

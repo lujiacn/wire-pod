@@ -1025,6 +1025,72 @@
           </div>
         </section>
 
+        <!-- ===================== TTS (SPEECH SYNTHESIS) ===================== -->
+        <section class="section" id="section-tts">
+          <div class="card">
+            <div class="card-h">
+              <svg class="ico" viewBox="0 0 24 24"><path d="M11 5 6 9H3v6h3l5 4V5Z"/><path d="M15.5 8.5a5 5 0 0 1 0 7"/><path d="M18.5 5.5a9 9 0 0 1 0 13"/></svg>
+              <h2>Speech synthesis (TTS)</h2>
+              <span class="sub">the robot's built-in voice is English-only</span>
+            </div>
+            <div class="card-b">
+              <div class="field">
+                <label for="ttsService">Speech engine</label>
+                <select id="ttsService" onchange="checkTTS()">
+                  <option value="">Robot built-in voice (Chinese not supported)</option>
+                  <option value="qwen">Qwen3-TTS via DashScope API</option>
+                </select>
+              </div>
+              <div id="qwenTTSInput" style="display:none">
+                <p class="hint" style="color:var(--muted-2);font-size:.78rem">Create an API key in the Alibaba Cloud Model Studio (Bailian) console. Responses are synthesized with Qwen3-TTS and played through Vector's speaker; the LLM is automatically allowed to answer in Chinese.</p>
+                <div class="grid c2">
+                  <div class="field"><label for="ttsKey">DashScope API key</label><input type="password" id="ttsKey" placeholder="sk-..." /></div>
+                  <div class="field">
+                    <label for="ttsRegion">API region</label>
+                    <select id="ttsRegion">
+                      <option value="cn" selected>Mainland China (dashscope.aliyuncs.com)</option>
+                      <option value="intl">International (dashscope-intl.aliyuncs.com)</option>
+                    </select>
+                  </div>
+                  <div class="field">
+                    <label for="ttsModel">TTS model</label>
+                    <select id="ttsModel">
+                      <option value="qwen3-tts-flash" selected>qwen3-tts-flash</option>
+                      <option value="qwen3-tts-instruct-flash">qwen3-tts-instruct-flash (instruction control)</option>
+                    </select>
+                  </div>
+                  <div class="field">
+                    <label for="ttsVoice">Voice</label>
+                    <select id="ttsVoice">
+                      <option value="Momo" selected>Momo (playful, cute — closest to Vector)</option>
+                      <option value="Vivian">Vivian (confident, cute, feisty)</option>
+                      <option value="Cherry">Cherry (sunny, friendly young woman)</option>
+                      <option value="Serena">Serena (gentle young woman)</option>
+                      <option value="Chelsie">Chelsie (virtual girlfriend)</option>
+                      <option value="Ethan">Ethan (sunny, warm man)</option>
+                      <option value="Moon">Moon (bold, handsome man)</option>
+                    </select>
+                  </div>
+                </div>
+                <div class="field"><label for="ttsInstructions">Voice instructions <span class="hint">(instruct model only, blank = cute-robot preset)</span></label><input type="text" id="ttsInstructions" placeholder="像一只可爱的小机器人，语速稍快，音调偏高" /></div>
+                <div class="field">
+                  <label for="ttsMode">When to use it</label>
+                  <select id="ttsMode">
+                    <option value="auto" selected>Only for Chinese responses (English keeps the built-in Vector voice)</option>
+                    <option value="all">For every response (English too)</option>
+                  </select>
+                </div>
+              </div>
+              <hr class="hr" />
+              <button class="btn primary" onclick="sendTTSAPIKey()">
+                <svg class="ico" viewBox="0 0 24 24"><path d="m5 13 4 4L19 7"/></svg>
+                Apply speech settings
+              </button>
+              <div id="addTTSAPIStatus" class="status"></div>
+            </div>
+          </div>
+        </section>
+
         <!-- ===================== RESTART ===================== -->
         <section class="section" id="section-restart">
           <div class="card">
@@ -1536,6 +1602,7 @@
         custom: { key: '', endpoint: '', model: '', prompt: '' }
       },
       stt: { provider: '', language: 'en-US' },
+      tts: { service: '' },
       ui: { accent: 'teal', font: 'droidsans' },
       sdk: {
         volume: 3, eyeColor: 0, customEye: null, locale: 'en-US', time24: false,
@@ -1691,6 +1758,7 @@
         group: 'Server', items: [
           { id: 'weather', label: 'Weather', icon: 'cloud-sun', desc: 'Weather provider used for weather questions.' },
           { id: 'kg', label: 'Knowledge Graph', icon: 'graph', desc: 'LLM provider, prompts, conversations and robot actions.' },
+          { id: 'tts', label: 'Speech (TTS)', icon: 'volume', desc: 'Speech synthesis engine: let Vector speak Chinese with Qwen3-TTS.' },
           { id: 'language', label: 'STT Language', icon: 'globe', desc: 'Speech-to-text language and model download.' },
           { id: 'restart', label: 'Restart', icon: 'restart', desc: 'Restart wire-pod to apply initial setup settings.' }
         ]
@@ -1785,6 +1853,7 @@
       refreshIntents();
       updateWeatherAPI();
       updateKGAPI();
+      updateTTSAPI();
       checkLanguage();
     }
 
@@ -2143,6 +2212,43 @@
       setStatus('addKGProviderAPIStatus', resp || 'Saved.', resp.includes('rror') ? 'err' : 'ok');
       toast(resp || 'Knowledge graph settings applied');
       updateKGAPI();
+    }
+
+    /* ------------------------------ tts (speech synthesis) ------------------------------ */
+    function checkTTS() {
+      $('qwenTTSInput').style.display = $('ttsService').value ? 'block' : 'none';
+    }
+    async function updateTTSAPI() {
+      const data = await apiJSON('/api/get_tts_api');
+      if (!data) return;
+      state.tts.service = data.service || '';
+      $('ttsService').value = state.tts.service;
+      $('ttsKey').value = data.key || '';
+      $('ttsRegion').value = data.region || 'cn';
+      $('ttsModel').value = data.model || 'qwen3-tts-flash';
+      $('ttsVoice').value = data.voice || 'Momo';
+      $('ttsInstructions').value = data.instructions || '';
+      $('ttsMode').value = data.mode || 'auto';
+      checkTTS();
+      renderHome();
+    }
+    async function sendTTSAPIKey() {
+      setStatus('addTTSAPIStatus', 'Saving...', 'warn');
+      const resp = await apiText('/api/set_tts_api', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          service: $('ttsService').value,
+          key: $('ttsKey').value,
+          region: $('ttsRegion').value,
+          model: $('ttsModel').value,
+          voice: $('ttsVoice').value,
+          instructions: $('ttsInstructions').value,
+          mode: $('ttsMode').value
+        })
+      });
+      setStatus('addTTSAPIStatus', resp || 'Saved.', resp.includes('rror') ? 'err' : 'ok');
+      toast(resp || 'Speech settings applied');
+      updateTTSAPI();
     }
     async function deleteSavedChats() {
       if (!confirm('Are you sure? This will delete all saved chats.')) return;
@@ -3277,6 +3383,7 @@
         ['stats', 'chart', 'Statistics', 'robot stats'],
         ['weather', 'cloud-sun', 'Weather', state.weather.provider || 'not set'],
         ['kg', 'graph', 'Knowledge Graph', state.kg.provider || 'not set'],
+        ['tts', 'volume', 'Speech (TTS)', state.tts.service ? 'Qwen3-TTS' : 'built-in voice'],
         ['language', 'globe', 'STT Language', state.stt.language || '-'],
         ['log', 'terminal', 'Log', 'live stream']
       ];
