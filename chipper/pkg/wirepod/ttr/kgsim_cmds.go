@@ -10,6 +10,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/fforchino/vector-go-sdk/pkg/vector"
@@ -343,6 +344,13 @@ func DoPlaySound(sound string, robot *vector.Vector) error {
 	return nil
 }
 
+// motor actions require a unique nonzero id tag per action
+var actionTagCounter int32 = 0
+
+func NextActionTag() int32 {
+	return atomic.AddInt32(&actionTagCounter, 1)
+}
+
 var eyeColorHues = map[string]float32{
 	"red":     0,
 	"orange":  30,
@@ -492,6 +500,7 @@ func DoDrive(param string, robot *vector.Vector) error {
 			SpeedMmps:           speed,
 			DistMm:              float32(distance),
 			ShouldPlayAnimation: false,
+			IdTag:               NextActionTag(),
 		},
 	)
 	if err != nil {
@@ -529,6 +538,7 @@ func DoTurn(param string, robot *vector.Vector) error {
 			AccelRadPerSec2: 10.0,
 			TolRad:          0.09,
 			IsAbsolute:      0,
+			IdTag:           NextActionTag(),
 		},
 	)
 	if err != nil {
