@@ -6,7 +6,9 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -28,6 +30,8 @@ const (
 	// arg: now
 	ActionGetImage   = 3
 	ActionNewRequest = 4
+	// arg: color name or hue 0-359
+	ActionSetEyeColor = 5
 	// arg: sound file
 	ActionPlaySound = 4
 )
@@ -130,6 +134,13 @@ var ValidLLMCommands []LLMCommand = []LLMCommand{
 		Description:     "Starts a new voice command from the robot. Use this if you want more input from the user after your response/if you want to carry out a conversation. Below this, there should be a NOTE telling you whether you are in conversation mode or not. If you are, DONT BE AFRAID TO USE THIS COMMAND! This goes at the end of your response, if you use it.",
 		ParamChoices:    "now",
 		Action:          ActionNewRequest,
+		SupportedModels: []string{"all"},
+	},
+	{
+		Command:         "setEyeColor",
+		Description:     "Changes the color of the robot's eyes. The parameter is either a color name or a hue number (0-359). Use this whenever the user asks to change the eye color.",
+		ParamChoices:    "red, orange, yellow, green, cyan, blue, purple, pink, white, or a hue number 0-359",
+		Action:          ActionSetEyeColor,
 		SupportedModels: []string{"all"},
 	},
 	// {
@@ -284,6 +295,48 @@ func DoPlaySound(sound string, robot *vector.Vector) error {
 		}
 	}
 	logger.Println("Sound provided by LLM doesn't exist: " + sound)
+	return nil
+}
+
+var eyeColorHues = map[string]float32{
+	"red":     0,
+	"orange":  30,
+	"yellow":  60,
+	"green":   120,
+	"cyan":    180,
+	"blue":    240,
+	"purple":  285,
+	"pink":    320,
+	"magenta": 320,
+}
+
+func DoSetEyeColor(param string, robot *vector.Vector) error {
+	param = strings.ToLower(strings.TrimSpace(param))
+	var hue float32
+	var saturation float32 = 1.0
+	if param == "white" {
+		saturation = 0.0
+	} else if h, ok := eyeColorHues[param]; ok {
+		hue = h
+	} else {
+		parsed, err := strconv.ParseFloat(param, 32)
+		if err != nil {
+			logger.Println("(eye color) could not parse eye color parameter: " + param)
+			return nil
+		}
+		hue = float32(math.Mod(math.Abs(parsed), 360))
+	}
+	logger.Println("(eye color) setting eye color, hue: " + fmt.Sprint(hue))
+	_, err := robot.Conn.SetEyeColor(
+		context.Background(),
+		&vectorpb.SetEyeColorRequest{
+			Hue:        hue,
+			Saturation: saturation,
+		},
+	)
+	if err != nil {
+		logger.Println("(eye color) error: " + err.Error())
+	}
 	return nil
 }
 
@@ -655,6 +708,8 @@ func PerformActions(msgs []openai.ChatCompletionMessage, actions []RobotAction, 
 			return true
 		case action.Action == ActionPlaySound:
 			DoPlaySound(action.Parameter, robot)
+		case action.Action == ActionSetEyeColor:
+			DoSetEyeColor(action.Parameter, robot)
 		}
 	}
 	WaitForAnim_Queue(robot.Cfg.SerialNo)
