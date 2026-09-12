@@ -26,6 +26,25 @@ func (s *Server) ProcessIntent(req *vtt.IntentRequest) (*vtt.IntentResponse, err
 			ttr.IntentPass(req, "intent_system_noaudio", "", map[string]string{}, false)
 			return nil, nil
 		}
+		if vars.APIConfig.Knowledge.Enable && vars.APIConfig.Knowledge.AlwaysLLM && vars.APIConfig.Knowledge.Provider != "houndify" {
+			// always-LLM mode: send every request straight to the LLM, which
+			// is much more accurate than the internal intent matching. if the
+			// LLM is not accessible, fall back to the internal intents
+			logger.Println("Making LLM request for device " + req.Device + " (always-LLM mode)...")
+			_, llmErr := ttr.StreamingKGSim(req, req.Device, transcribedText, false, "")
+			if llmErr != nil {
+				logger.Println("LLM error: " + llmErr.Error())
+				logger.LogUI("LLM error: " + llmErr.Error())
+				logger.Println("Falling back to internal intent processing...")
+				if !ttr.ProcessTextAll(req, transcribedText, vars.IntentList, speechReq.IsOpus) {
+					logger.Println("No intent was matched.")
+					ttr.IntentPass(req, "intent_system_unmatched", transcribedText, map[string]string{"": ""}, false)
+					ttr.KGSim(req.Device, "There was an error getting a response from the L L M. Check the logs in the web interface.")
+				}
+			}
+			logger.Println("Bot " + speechReq.Device + " request served.")
+			return nil, nil
+		}
 		successMatched = ttr.ProcessTextAll(req, transcribedText, vars.IntentList, speechReq.IsOpus)
 	} else {
 		intent, slots, err := stiHandler(speechReq)

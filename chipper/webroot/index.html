@@ -974,6 +974,12 @@
                   <span><b>Enable intent-graph</b>Forward the request to the LLM when the regular intent processor didn't understand it.</span>
                 </label>
               </div>
+              <div id="alwaysLLMInput" style="display:none">
+                <label class="switch">
+                  <input type="checkbox" id="alwaysLLMYes" />
+                  <span><b>Always use LLM for intents</b>Send every spoken request to the LLM first instead of matching built-in intents (much more accurate). Falls back to the built-in intents if the LLM cannot be reached.</span>
+                </label>
+              </div>
               <div id="llmCommandInput" style="display:none">
                 <label class="switch">
                   <input type="checkbox" id="commandYes" />
@@ -2036,15 +2042,15 @@
     }
 
     /* ------------------------------ knowledge graph ------------------------------ */
-    const KG_IDS = ['houndifyInput', 'togetherInput', 'customAIInput', 'intentGraphInput', 'openAIInput', 'saveChatInput', 'llmCommandInput', 'openAIVoiceForEnglishInput', 'photoInput'];
+    const KG_IDS = ['houndifyInput', 'togetherInput', 'customAIInput', 'intentGraphInput', 'alwaysLLMInput', 'openAIInput', 'saveChatInput', 'llmCommandInput', 'openAIVoiceForEnglishInput', 'photoInput'];
     function checkKG() {
       const provider = $('kgProvider').value;
       KG_IDS.forEach((id) => { $(id).style.display = 'none'; });
       if (!provider) return;
       if (provider === 'houndify') { $('houndifyInput').style.display = 'block'; $('intentGraphInput').style.display = 'block'; }
-      else if (provider === 'openai') { $('intentGraphInput').style.display = 'block'; $('openAIInput').style.display = 'block'; $('saveChatInput').style.display = 'block'; $('llmCommandInput').style.display = 'block'; $('openAIVoiceForEnglishInput').style.display = 'block'; $('photoInput').style.display = 'block'; }
-      else if (provider === 'together') { $('intentGraphInput').style.display = 'block'; $('togetherInput').style.display = 'block'; $('saveChatInput').style.display = 'block'; $('llmCommandInput').style.display = 'block'; $('photoInput').style.display = 'block'; }
-      else if (provider === 'custom') { $('intentGraphInput').style.display = 'block'; $('customAIInput').style.display = 'block'; $('saveChatInput').style.display = 'block'; $('llmCommandInput').style.display = 'block'; $('photoInput').style.display = 'block'; }
+      else if (provider === 'openai') { $('intentGraphInput').style.display = 'block'; $('alwaysLLMInput').style.display = 'block'; $('openAIInput').style.display = 'block'; $('saveChatInput').style.display = 'block'; $('llmCommandInput').style.display = 'block'; $('openAIVoiceForEnglishInput').style.display = 'block'; $('photoInput').style.display = 'block'; }
+      else if (provider === 'together') { $('intentGraphInput').style.display = 'block'; $('alwaysLLMInput').style.display = 'block'; $('togetherInput').style.display = 'block'; $('saveChatInput').style.display = 'block'; $('llmCommandInput').style.display = 'block'; $('photoInput').style.display = 'block'; }
+      else if (provider === 'custom') { $('intentGraphInput').style.display = 'block'; $('alwaysLLMInput').style.display = 'block'; $('customAIInput').style.display = 'block'; $('saveChatInput').style.display = 'block'; $('llmCommandInput').style.display = 'block'; $('photoInput').style.display = 'block'; }
     }
     async function updateKGAPI() {
       const data = await apiJSON('/api/get_kg_api');
@@ -2052,6 +2058,7 @@
       state.kg.provider = data.provider || '';
       $('kgProvider').value = state.kg.provider;
       $('intentyes').checked = !!data.intentgraph;
+      $('alwaysLLMYes').checked = !!data.always_llm;
       $('saveChatYes').checked = !!data.save_chat;
       $('commandYes').checked = !!data.commands_enable;
       $('voiceEnglishYes').checked = !!data.openai_voice_with_english;
@@ -2083,13 +2090,14 @@
       const data = {
         enable: true, provider: provider, key: '', model: '', id: '', intentgraph: false, robotName: '',
         openai_prompt: '', openai_voice: '', openai_voice_with_english: false, save_chat: false,
-        commands_enable: false, photo_send: false, endpoint: ''
+        commands_enable: false, photo_send: false, always_llm: false, endpoint: ''
       };
       if (provider === 'openai') {
         data.key = $('openaiKey').value;
         data.openai_base = $('openaiBase').value;
         data.openai_prompt = $('openAIPrompt').value;
         data.intentgraph = $('intentyes').checked;
+        data.always_llm = $('alwaysLLMYes').checked;
         data.save_chat = $('saveChatYes').checked;
         data.commands_enable = $('commandYes').checked;
         data.openai_voice = $('openaiVoice').value;
@@ -2101,6 +2109,7 @@
         data.openai_prompt = $('customAIPrompt').value;
         data.endpoint = $('customAIEndpoint').value;
         data.intentgraph = $('intentyes').checked;
+        data.always_llm = $('alwaysLLMYes').checked;
         data.save_chat = $('saveChatYes').checked;
         data.commands_enable = $('commandYes').checked;
         data.photo_send = $('photoYes').checked;
@@ -2109,6 +2118,7 @@
         data.model = $('togetherModel').value;
         data.openai_prompt = $('togetherAIPrompt').value;
         data.intentgraph = $('intentyes').checked;
+        data.always_llm = $('alwaysLLMYes').checked;
         data.save_chat = $('saveChatYes').checked;
         data.commands_enable = $('commandYes').checked;
         data.photo_send = $('photoYes').checked;

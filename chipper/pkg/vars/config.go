@@ -27,6 +27,7 @@ type apiConfig struct {
 		ID                     string  `json:"id"`
 		Model                  string  `json:"model"`
 		IntentGraph            bool    `json:"intentgraph"`
+		AlwaysLLM              bool    `json:"always_llm"`
 		RobotName              string  `json:"robotName"`
 		OpenAIPrompt           string  `json:"openai_prompt"`
 		OpenAIVoice            string  `json:"openai_voice"`
