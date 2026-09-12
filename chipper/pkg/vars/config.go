@@ -42,8 +42,11 @@ type apiConfig struct {
 		Temperature            float32 `json:"temp"`
 	} `json:"knowledge"`
 	STT struct {
-		Service  string `json:"provider"`
-		Language string `json:"language"`
+		Service         string `json:"provider"`
+		Language        string `json:"language"`
+		WhisperEndpoint string `json:"whisper_endpoint"`
+		WhisperKey      string `json:"whisper_key"`
+		WhisperModel    string `json:"whisper_model"`
 	} `json:"STT"`
 	Server struct {
 		// false for ip, true for escape pod

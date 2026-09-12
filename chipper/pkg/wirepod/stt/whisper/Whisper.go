@@ -25,9 +25,8 @@ type openAiResp struct {
 }
 
 func Init() error {
-	if os.Getenv("OPENAI_KEY") == "" {
-		logger.Println("This is an early implementation of the Whisper API which has not been implemented into the web interface. You must set the OPENAI_KEY env var.")
-		//os.Exit(1)
+	if os.Getenv("OPENAI_KEY") == "" && strings.TrimSpace(vars.APIConfig.STT.WhisperKey) == "" {
+		logger.Println("Whisper API STT: no API key configured. Set the OPENAI_KEY env var or the STT whisper_key field in apiConfig.json.")
 	}
 	return nil
 }
@@ -100,11 +99,25 @@ func buildVocabPrompt() string {
 }
 
 func makeOpenAIReq(in []byte) string {
-	url := "https://api.openai.com/v1/audio/transcriptions"
+	// the transcription endpoint, key and model are configurable, so any
+	// OpenAI-compatible transcription API works (OpenAI, Groq, a proxy...)
+	endpoint := strings.TrimSpace(vars.APIConfig.STT.WhisperEndpoint)
+	if endpoint == "" {
+		endpoint = "https://api.openai.com/v1/audio/transcriptions"
+	}
+	key := strings.TrimSpace(vars.APIConfig.STT.WhisperKey)
+	if key == "" {
+		key = os.Getenv("OPENAI_KEY")
+	}
+	model := strings.TrimSpace(vars.APIConfig.STT.WhisperModel)
+	if model == "" {
+		model = "whisper-1"
+	}
+	logger.Println("(Whisper API) transcribing with model " + model + " at " + endpoint)
 
 	buf := new(bytes.Buffer)
 	w := multipart.NewWriter(buf)
-	w.WriteField("model", "whisper-1")
+	w.WriteField("model", model)
 	// Without an explicit language whisper-1 guesses per utterance and gets short
 	// commands wrong, sometimes returning English for German speech.
 	if lang := strings.Split(vars.APIConfig.STT.Language, "-")[0]; lang != "" {
@@ -117,9 +130,9 @@ func makeOpenAIReq(in []byte) string {
 	sendFile.Write(in)
 	w.Close()
 
-	httpReq, _ := http.NewRequest("POST", url, buf)
+	httpReq, _ := http.NewRequest("POST", endpoint, buf)
 	httpReq.Header.Set("Content-Type", w.FormDataContentType())
-	httpReq.Header.Set("Authorization", "Bearer "+os.Getenv("OPENAI_KEY"))
+	httpReq.Header.Set("Authorization", "Bearer "+key)
 
 	client := &http.Client{}
 	resp, err := client.Do(httpReq)

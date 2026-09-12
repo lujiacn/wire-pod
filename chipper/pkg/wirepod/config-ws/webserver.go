@@ -240,6 +240,12 @@ func handleSetSTTInfo(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "language not valid", http.StatusBadRequest)
 			return
 		}
+	} else if vars.APIConfig.STT.Service == "whisper" {
+		// cloud Whisper API: no model download needed
+		if !isValidLanguage(request.Language, localization.ValidVoskModels) {
+			http.Error(w, "language not valid", http.StatusBadRequest)
+			return
+		}
 	} else {
 		http.Error(w, "service must be vosk or whisper", http.StatusBadRequest)
 		return
