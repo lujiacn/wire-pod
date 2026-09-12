@@ -330,24 +330,27 @@ func StreamingKGSim(req interface{}, esn string, transcribedText string, isKG bo
 		for {
 			response, err := stream.Recv()
 			if errors.Is(err, io.EOF) {
-				// prevents a crash
 				if len(fullRespSlice) == 0 {
-					if strings.TrimSpace(fullfullRespText) != "" {
-						logger.Println("LLM debug: received text but it could not be split for speech: " + fullfullRespText)
-					} else {
+					if strings.TrimSpace(fullfullRespText) == "" {
 						logger.Println("LLM returned no response")
-					}
-					successIntent <- false
-					if isKG {
-						kgStopLooping = true
-						for range kgReadyToAnswer {
-							break
+						successIntent <- false
+						if isKG {
+							kgStopLooping = true
+							for range kgReadyToAnswer {
+								break
+							}
+							stop <- true
+							time.Sleep(time.Second / 3)
+							KGSim(esn, "There was an error getting data from the L. L. M.")
 						}
-						stop <- true
-						time.Sleep(time.Second / 3)
-						KGSim(esn, "There was an error getting data from the L. L. M.")
+						break
 					}
-					break
+					// the LLM responded but used no sentence-ending
+					// punctuation - speak the whole response as one chunk
+					// instead of dropping it
+					logger.Println("LLM debug: response has no sentence punctuation, speaking it as one chunk")
+					fullRespSlice = append(fullRespSlice, strings.TrimSpace(fullfullRespText))
+					fullRespText = ""
 				}
 				isDone = true
 				// if fullRespSlice != fullRespText, add that missing bit to fullRespSlice

@@ -206,7 +206,7 @@ func ModelIsSupported(cmd LLMCommand, model string) bool {
 }
 
 func CreatePrompt(origPrompt string, model string, isKG bool) string {
-	prompt := origPrompt + "\n\n" + "Keep in mind, user input comes from speech-to-text software, so respond accordingly. No special characters, especially these: & ^ * # @ - . No lists. No formatting. No emoji."
+	prompt := origPrompt + "\n\n" + "Keep in mind, user input comes from speech-to-text software, so respond accordingly. No special characters like ampersand, caret, asterisk, hash or at sign. Always use normal sentence punctuation and end every sentence with a period, question mark or exclamation mark. No lists. No formatting. No emoji."
 	prompt = prompt + "\n\n" + "The user may speak in any language. Always try to understand the user's input no matter which language it is in, but ALWAYS respond in English only, because the robot's speech engine can only speak English and must be able to follow your response with animations and actions. Never reply in any other language."
 	prompt = prompt + "\n\n" + "Today's date is " + time.Now().Format("Monday, January 2, 2006") + "."
 	if vars.APIConfig.Knowledge.CommandsEnable {
