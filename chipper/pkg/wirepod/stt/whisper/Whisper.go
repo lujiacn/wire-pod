@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"encoding/json"
+	"fmt"
 	"io"
 	"mime/multipart"
 	"net/http"
@@ -109,6 +110,10 @@ func makeOpenAIReq(in []byte) string {
 	if key == "" {
 		key = os.Getenv("OPENAI_KEY")
 	}
+	if key == "" {
+		logger.Println("(Whisper API) no API key configured - set STT whisper_key in the web UI (or OPENAI_KEY env)")
+		return ""
+	}
 	model := strings.TrimSpace(vars.APIConfig.STT.WhisperModel)
 	if model == "" {
 		model = "whisper-1"
@@ -137,17 +142,27 @@ func makeOpenAIReq(in []byte) string {
 	client := &http.Client{}
 	resp, err := client.Do(httpReq)
 	if err != nil {
-		logger.Println(err)
-		return "There was an error."
+		logger.Println("(Whisper API) request failed: " + err.Error())
+		return ""
 	}
 
 	defer resp.Body.Close()
 
 	response, _ := io.ReadAll(resp.Body)
 
-	var aiResponse openAiResp
-	json.Unmarshal(response, &aiResponse)
+	if resp.StatusCode != http.StatusOK {
+		logger.Println(fmt.Sprintf("(Whisper API) HTTP %d from %s: %s", resp.StatusCode, endpoint, string(response)))
+		return ""
+	}
 
+	var aiResponse openAiResp
+	if err := json.Unmarshal(response, &aiResponse); err != nil {
+		logger.Println("(Whisper API) could not parse response: " + err.Error() + " - body: " + string(response))
+		return ""
+	}
+	if strings.TrimSpace(aiResponse.Text) == "" {
+		logger.Println("(Whisper API) transcription is empty - audio was silent/unclear, or the STT language does not match the spoken language")
+	}
 	return aiResponse.Text
 }
 
