@@ -72,7 +72,27 @@ func Remember(user, ai openai.ChatCompletionMessage, esn string) {
 }
 
 func isMn(r rune) bool {
-	return unicode.Is(unicode.Mn, r) // Mn: nonspacing marks
+	// Remove the characters that are not related to Vietnamese.
+	// Retain the tonal marks and diacritics such as the circumflex, ơ, and ư in Vietnamese.
+	keepMarks := []rune{
+		'\u0300', // Dấu huyền
+		'\u0301', // Dấu sắc
+		'\u0303', // Dấu ngã
+		'\u0309', // Dấu hỏi
+		'\u0323', // Dấu nặng
+		'\u0302', // Dấu mũ (â, ê, ô)
+		'\u031B', // Dấu ơ và ư
+		'\u0306', // Dấu trầm
+	}
+	if unicode.Is(unicode.Mn, r) {
+		for _, mark := range keepMarks {
+			if r == mark {
+				return false
+			}
+		}
+		return true
+	}
+	return false
 }
 
 func removeSpecialCharacters(str string) string {
@@ -140,6 +160,9 @@ func CreateAIReq(transcribedText, esn string, gpt3tryagain, isKG bool) openai.Ch
 		model = openai.GPT3Dot5Turbo
 	} else if vars.APIConfig.Knowledge.Provider == "openai" {
 		model = openai.GPT4oMini
+		if m := strings.TrimSpace(vars.APIConfig.Knowledge.Model); m != "" {
+			model = m
+		}
 		logger.Println("Using " + model)
 	} else {
 		logger.Println("Using " + vars.APIConfig.Knowledge.Model)
@@ -160,14 +183,14 @@ func CreateAIReq(transcribedText, esn string, gpt3tryagain, isKG bool) openai.Ch
 	})
 
 	aireq := openai.ChatCompletionRequest{
-		Model:            model,
-		MaxTokens:        2048,
-		Temperature:      1,
-		TopP:             1,
-		FrequencyPenalty: 0,
-		PresencePenalty:  0,
-		Messages:         nChat,
-		Stream:           true,
+		Model:               model,
+		MaxCompletionTokens: 2048,
+		Temperature:         1,
+		TopP:                1,
+		FrequencyPenalty:    0,
+		PresencePenalty:     0,
+		Messages:            nChat,
+		Stream:              true,
 	}
 	return aireq
 }
@@ -225,7 +248,8 @@ func StreamingKGSim(req interface{}, esn string, transcribedText string, isKG bo
 	var fullRespSlice []string
 	var isDone bool
 	var c *openai.Client
-	if vars.APIConfig.Knowledge.Provider == "together" {
+	switch vars.APIConfig.Knowledge.Provider {
+	case "together":
 		if vars.APIConfig.Knowledge.Model == "" {
 			vars.APIConfig.Knowledge.Model = "meta-llama/Llama-3-70b-chat-hf"
 			vars.WriteConfigToDisk()
@@ -233,12 +257,17 @@ func StreamingKGSim(req interface{}, esn string, transcribedText string, isKG bo
 		conf := openai.DefaultConfig(vars.APIConfig.Knowledge.Key)
 		conf.BaseURL = "https://api.together.xyz/v1"
 		c = openai.NewClientWithConfig(conf)
-	} else if vars.APIConfig.Knowledge.Provider == "custom" {
+	case "custom":
 		conf := openai.DefaultConfig(vars.APIConfig.Knowledge.Key)
 		conf.BaseURL = vars.APIConfig.Knowledge.Endpoint
 		c = openai.NewClientWithConfig(conf)
-	} else if vars.APIConfig.Knowledge.Provider == "openai" {
-		c = openai.NewClient(vars.APIConfig.Knowledge.Key)
+	case "openai":
+		conf := openai.DefaultConfig(vars.APIConfig.Knowledge.Key)
+		// If OpenAIBase is not blank, use it as the base URL
+		if baseURL := strings.TrimSpace(vars.APIConfig.Knowledge.OpenAIBase); baseURL != "" {
+			conf.BaseURL = baseURL
+		}
+		c = openai.NewClientWithConfig(conf)
 	}
 	speakReady := make(chan string)
 	successIntent := make(chan bool)
@@ -247,6 +276,7 @@ func StreamingKGSim(req interface{}, esn string, transcribedText string, isKG bo
 
 	stream, err := c.CreateChatCompletionStream(ctx, aireq)
 	if err != nil {
+		log.Printf("Error creating chat completion stream: %v", err)
 		if strings.Contains(err.Error(), "does not exist") && vars.APIConfig.Knowledge.Provider == "openai" {
 			logger.Println("GPT-4 model cannot be accessed with this API key. You likely need to add more than $5 dollars of funds to your OpenAI account.")
 			logger.LogUI("GPT-4 model cannot be accessed with this API key. You likely need to add more than $5 dollars of funds to your OpenAI account.")
@@ -327,6 +357,11 @@ func StreamingKGSim(req interface{}, esn string, transcribedText string, isKG bo
 
 			if err != nil {
 				logger.Println("Stream error: " + err.Error())
+				return
+			}
+
+			if len(response.Choices) == 0 {
+				logger.Println("Empty response")
 				return
 			}
 

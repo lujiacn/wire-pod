@@ -11,17 +11,18 @@ require (
 	github.com/digital-dream-labs/opus-go v0.0.0-20201230195736-934a8a9e0a1e
 	github.com/digital-dream-labs/vector-bluetooth v0.0.0-20210604051118-1c511122d877
 	github.com/fforchino/vector-go-sdk v0.0.0-20231108155304-62168f3595d6
-	github.com/ggerganov/whisper.cpp/bindings/go v0.0.0-20240727173504-6739eb83c3ca
 	github.com/go-audio/audio v1.0.0
 	github.com/go-audio/wav v1.1.0
 	github.com/golang-jwt/jwt v3.2.2+incompatible
 	github.com/google/uuid v1.6.0
 	github.com/kercre123/vosk-api/go v1.0.2
+	github.com/kercre123/whisper.cpp/bindings/go v0.0.0-20250602164512-60cd96acff3a
 	github.com/kercre123/zeroconf v1.0.1
 	github.com/maxhawkins/go-webrtcvad v0.0.0-20210121163624-be60036f3083
 	github.com/ncruces/zenity v0.10.13
 	github.com/orcaman/writerseeker v0.0.0-20200621085525-1d3f536ff85e
-	github.com/sashabaranov/go-openai v1.27.1
+	github.com/pkg/errors v0.9.1
+	github.com/sashabaranov/go-openai v1.41.2
 	github.com/soheilhy/cmux v0.1.5
 	github.com/soundhound/houndify-sdk-go v0.3.5
 	github.com/vadv/gopher-lua-libs v0.5.0
@@ -61,6 +62,7 @@ require (
 	github.com/jamesruan/sodium v0.0.0-20181216154042-9620b83ffeae // indirect
 	github.com/jmespath/go-jmespath v0.4.0 // indirect
 	github.com/josephspurrier/goversioninfo v1.4.0 // indirect
+	github.com/kr/text v0.2.0 // indirect
 	github.com/lib/pq v1.7.0 // indirect
 	github.com/magiconair/properties v1.8.1 // indirect
 	github.com/mattn/go-colorable v0.1.8 // indirect
@@ -74,7 +76,6 @@ require (
 	github.com/mitchellh/mapstructure v1.4.3 // indirect
 	github.com/montanaflynn/stats v0.6.3 // indirect
 	github.com/pelletier/go-toml v1.8.0 // indirect
-	github.com/pkg/errors v0.9.1 // indirect
 	github.com/prometheus/client_golang v1.11.1 // indirect
 	github.com/prometheus/client_model v0.2.0 // indirect
 	github.com/prometheus/common v0.26.0 // indirect

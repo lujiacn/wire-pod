@@ -1,12 +1,8 @@
 package processreqs
 
 import (
-<<<<<<< HEAD
-	"bytes"
-	"context"
-=======
->>>>>>> 2395bd31afc3aa27e040423f2e3857b09cc29303
 	"encoding/json"
+	"regexp"
 	"strings"
 
 	pb "github.com/digital-dream-labs/api/go/chipperpb"
@@ -16,7 +12,6 @@ import (
 	sr "github.com/kercre123/wire-pod/chipper/pkg/wirepod/speechrequest"
 	ttr "github.com/kercre123/wire-pod/chipper/pkg/wirepod/ttr"
 	"github.com/pkg/errors"
-	"github.com/sashabaranov/go-openai"
 	"github.com/soundhound/houndify-sdk-go"
 )
 
@@ -123,4 +118,43 @@ func (s *Server) ProcessKnowledgeGraph(req *vtt.KnowledgeGraphRequest) (*vtt.Kno
 	}
 	return nil, nil
 
+}
+
+func cleanHoundifyResponse(response string) string {
+	// This should remove the "Redirected from" text
+	re := regexp.MustCompile(`^Redirected from [^.]+\.\s*`)
+	cleaned := re.ReplaceAllString(response, "")
+	return cleaned
+}
+
+func houndifyTextRequest(queryText string, device string, session string) string {
+	if !vars.APIConfig.Knowledge.Enable || vars.APIConfig.Knowledge.Provider != "houndify" {
+		return "Houndify is not enabled."
+	}
+
+	logger.Println("Sending text request to Houndify...")
+
+	req := houndify.TextRequest{
+		Query:     queryText,
+		UserID:    device,
+		RequestID: session,
+	}
+
+	serverResponse, err := HKGclient.TextSearch(req)
+	if err != nil {
+		logger.Println("Error sending text request to Houndify:", err)
+		return ""
+	}
+
+	apiResponse, err := ParseSpokenResponse(serverResponse)
+	if err != nil {
+		logger.Println("Error parsing Houndify response:", err)
+		logger.Println("Raw response:", serverResponse)
+		return ""
+	}
+
+	apiResponse = cleanHoundifyResponse(apiResponse)
+
+	logger.Println("Houndify response:", apiResponse)
+	return apiResponse
 }

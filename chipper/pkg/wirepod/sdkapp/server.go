@@ -2,6 +2,7 @@ package sdkapp
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"image"
@@ -95,6 +96,10 @@ func SdkapiHandler(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintf(w, "done")
 		return
 	case r.URL.Path == "/api-sdk/get_sdk_info":
+		if len(vars.BotInfo.Robots) == 0 {
+			http.Error(w, "no bots are authenticated", http.StatusInternalServerError)
+			return
+		}
 		jsonBytes, err := json.Marshal(vars.BotInfo)
 		if err != nil {
 			fmt.Fprintf(w, "error marshaling json")
@@ -135,6 +140,77 @@ func SdkapiHandler(w http.ResponseWriter, r *http.Request) {
 			w.Write([]byte(json))
 			return
 		}
+
+	case r.URL.Path == "/api-sdk/play_sound":
+		file, _, err := r.FormFile("sound")
+		if err != nil {
+			println("Error retrieving the file:", err)
+			return
+		}
+		defer file.Close()
+
+		// Lê o conteúdo do arquivo em um slice de bytes
+		pcmFile, err := io.ReadAll(file)
+		if err != nil {
+			println("Error reading the file:", err)
+			return
+		}
+
+		var audioChunks [][]byte
+		for len(pcmFile) >= 1024 {
+			audioChunks = append(audioChunks, pcmFile[:1024])
+			pcmFile = pcmFile[1024:]
+		}
+
+		var audioClient vectorpb.ExternalInterface_ExternalAudioStreamPlaybackClient
+		audioClient, _ = robot.Conn.ExternalAudioStreamPlayback(ctx)
+		audioClient.SendMsg(&vectorpb.ExternalAudioStreamRequest{
+			AudioRequestType: &vectorpb.ExternalAudioStreamRequest_AudioStreamPrepare{
+				AudioStreamPrepare: &vectorpb.ExternalAudioStreamPrepare{
+					AudioFrameRate: 8000,
+					AudioVolume:    uint32(100),
+				},
+			},
+		})
+
+		for _, chunk := range audioChunks {
+			audioClient.SendMsg(&vectorpb.ExternalAudioStreamRequest{
+				AudioRequestType: &vectorpb.ExternalAudioStreamRequest_AudioStreamChunk{
+					AudioStreamChunk: &vectorpb.ExternalAudioStreamChunk{
+						AudioChunkSizeBytes: uint32(len(chunk)),
+						AudioChunkSamples:   chunk,
+					},
+				},
+			})
+			time.Sleep(time.Millisecond * 60)
+		}
+
+		audioClient.SendMsg(&vectorpb.ExternalAudioStreamRequest{
+			AudioRequestType: &vectorpb.ExternalAudioStreamRequest_AudioStreamComplete{
+				AudioStreamComplete: &vectorpb.ExternalAudioStreamComplete{},
+			},
+		})
+
+		return
+
+	case r.URL.Path == "/api-sdk/get_battery":
+		// Ensure the endpoint times out after 15 seconds
+		ctx := r.Context() // Get the request context
+		ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
+		defer cancel()
+
+		resp, err := robot.Conn.BatteryState(ctx, &vectorpb.BatteryStateRequest{})
+		if err != nil {
+			fmt.Fprint(w, "error: "+err.Error())
+			return
+		}
+		jsonBytes, err := json.Marshal(resp)
+		if err != nil {
+			fmt.Fprint(w, "error: "+err.Error())
+			return
+		}
+		fmt.Fprint(w, string(jsonBytes))
+		return
 	case r.URL.Path == "/api-sdk/time_format_12":
 		setSettingSDKintbool(robotObj, "clock_24_hour", "false")
 		fmt.Fprintf(w, "done")
@@ -444,6 +520,28 @@ func SdkapiHandler(w http.ResponseWriter, r *http.Request) {
 		removeRobot(robotObj.ESN, "server")
 		fmt.Fprint(w, "done")
 		return
+	case r.URL.Path == "/api-sdk/trigger_wake_word":
+		robotIP := strings.Split(robotObj.Target, ":")[0]
+		consoleURL := fmt.Sprintf("http://%s:8889/consolevarset?key=FakeButtonPressType&value=singlePressDetected", robotIP)
+		
+		client := &http.Client{
+			Timeout: 10 * time.Second,
+		}
+		
+		resp, err := client.Get(consoleURL)
+		if err != nil {
+			http.Error(w, "Failed to trigger wake word: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+		defer resp.Body.Close()
+		
+		if resp.StatusCode != http.StatusOK {
+			http.Error(w, "Consolevars returned error", resp.StatusCode)
+			return
+		}
+		
+		fmt.Fprint(w, "success")
+		return
 	}
 }
 
@@ -549,4 +647,59 @@ func BeginServer() {
 			logger.Println("A process is already using port 80 - connCheck functionality will not work")
 		}
 	}
+}
+
+func rgbToBytes(rgbValues [][][3]uint8) ([]byte, error) {
+	var buffer bytes.Buffer
+
+	for _, row := range rgbValues {
+		for _, pixel := range row {
+			// Directly add the R, G and B values ​​to the buffer
+			buffer.WriteByte(pixel[0]) // R
+			buffer.WriteByte(pixel[1]) // G
+			buffer.WriteByte(pixel[2]) // B
+		}
+	}
+
+	return buffer.Bytes(), nil
+}
+func imageToBytes(img image.Image) ([]byte, error) {
+	bounds := img.Bounds()
+	var buffer bytes.Buffer
+
+	for y := bounds.Min.Y; y < bounds.Max.Y; y++ {
+		for x := bounds.Min.X; x < bounds.Max.X; x++ {
+			// Obtém a cor do pixel
+			c := img.At(x, y)
+			r, g, b, _ := c.RGBA() // Ignorando o valor Alpha
+
+			// Converte de uint32 para uint8
+			buffer.WriteByte(uint8(r >> 8))
+			buffer.WriteByte(uint8(g >> 8))
+			buffer.WriteByte(uint8(b >> 8))
+		}
+	}
+
+	return buffer.Bytes(), nil
+}
+
+func resizeImage(original image.Image, width, height int) image.Image {
+	if width <= 0 || height <= 0 {
+		return original
+	}
+
+	newImage := image.NewRGBA(image.Rect(0, 0, width, height))
+
+	scaleX := float64(original.Bounds().Dx()) / float64(width)
+	scaleY := float64(original.Bounds().Dy()) / float64(height)
+
+	for y := 0; y < height; y++ {
+		for x := 0; x < width; x++ {
+			srcX := int(float64(x) * scaleX)
+			srcY := int(float64(y) * scaleY)
+			newImage.Set(x, y, original.At(srcX, srcY))
+		}
+	}
+
+	return newImage
 }

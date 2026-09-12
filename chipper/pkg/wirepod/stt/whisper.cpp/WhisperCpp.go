@@ -8,7 +8,7 @@ import (
 	"runtime"
 	"strings"
 
-	whisper "github.com/ggerganov/whisper.cpp/bindings/go"
+	whisper "github.com/kercre123/whisper.cpp/bindings/go"
 	"github.com/kercre123/wire-pod/chipper/pkg/logger"
 	"github.com/kercre123/wire-pod/chipper/pkg/vars"
 	sr "github.com/kercre123/wire-pod/chipper/pkg/wirepod/speechrequest"
@@ -62,7 +62,7 @@ func Init() error {
 	logger.Println("Opening Whisper model (" + modelPath + ")")
 	//logger.Println(whisper.Whisper_print_system_info())
 	context = whisper.Whisper_init(modelPath)
-	params = context.Whisper_full_default_params(whisper.SAMPLING_GREEDY)
+	params = context.Whisper_full_default_params(whisper.SamplingStrategy(whisper.SAMPLING_GREEDY))
 	params.SetTranslate(false)
 	params.SetPrintSpecial(false)
 	params.SetPrintProgress(false)

@@ -35,11 +35,13 @@ function updateIntentSelection(element) {
         error.innerHTML = "No intents found, you must add one first";
         container.appendChild(error);
       }
+    }).catch(() => {
+      // Do nothing
     });
 }
 
 function checkInited() {
-  fetch("/api/is_api_v2").then((response) => {
+  fetch("/api/is_api_v3").then((response) => {
     if (!response.ok) {
       alert(
         "This webroot does not match with the wire-pod binary. Some functionality will be broken. There was either an error during the last update, or you did not precisely follow the update guide. https://github.com/kercre123/wire-pod/wiki/Things-to-Know#updating-wire-pod"
@@ -109,7 +111,10 @@ function editFormCreate() {
       } else {
         displayError("editIntentForm", "No intents found, you must add one first");
       }
-    });
+    }).catch((error) => {
+      console.error(error);
+      displayError("editIntentForm", "Error fetching intents");
+    })
 }
 
 function editIntent(intentNumber) {
@@ -255,6 +260,7 @@ function checkKG() {
   if (provider) {
     if (provider === "houndify") {
       getE("houndifyInput").style.display = "block";
+      getE("intentGraphInput").style.display = "block";
     } else if (provider === "openai") {
       getE("intentGraphInput").style.display = "block";
       getE("openAIInput").style.display = "block";
@@ -294,7 +300,7 @@ function sendKGAPIKey() {
   };
   if (provider === "openai") {
     data.key = getE("openaiKey").value;
-    data.base = getE("openaiBase").value;
+    data.openai_base = getE("openaiBase").value;
     data.openai_prompt = getE("openAIPrompt").value;
     data.intentgraph = getE("intentyes").checked
     data.save_chat = getE("saveChatYes").checked
@@ -319,6 +325,7 @@ function sendKGAPIKey() {
   } else if (provider === "houndify") {
     data.key = getE("houndKey").value;
     data.id = getE("houndID").value;
+    data.intentgraph = getE("intentyes").checked
   } else {
     data.enable = false;
   }
@@ -358,7 +365,7 @@ function updateKGAPI() {
       getE("kgProvider").value = data.provider;
       if (data.provider === "openai") {
         getE("openaiKey").value = data.key;
-        getE("openaiBase").value = data.base;
+        getE("openaiBase").value = data.openai_base;
         getE("openAIPrompt").value = data.openai_prompt;
         getE("openaiVoice").value = data.openai_voice;
         getE("commandYes").checked = data.commands_enable
@@ -383,6 +390,7 @@ function updateKGAPI() {
       } else if (data.provider === "houndify") {
         getE("houndKey").value = data.key;
         getE("houndID").value = data.id;
+        getE("intentyes").checked = data.intentgraph
       }
       if (data.save_chat) {
         getE("saveChatNum").value = data.save_chat_num || 0;

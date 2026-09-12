@@ -123,7 +123,7 @@ var ValidLLMCommands []LLMCommand = []LLMCommand{
 		// not impl yet
 		ParamChoices:    "front, lookingUp",
 		Action:          ActionGetImage,
-		SupportedModels: []string{openai.GPT4o, openai.GPT4oMini},
+		SupportedModels: []string{"all"},
 	},
 	{
 		Command:         "newVoiceRequest",
@@ -332,13 +332,7 @@ func DoSayText_OpenAI(robot *vector.Vector, input string) error {
 	if strings.TrimSpace(input) == "" {
 		return nil
 	}
-	// openaiVoice := getOpenAIVoice(vars.APIConfig.Knowledge.OpenAIPrompt)
-
-	openaiVoice := openai.VoiceFable
-
-	if vars.APIConfig.Knowledge.OpenAIVoice != "" {
-		openaiVoice = getOpenAIVoice(vars.APIConfig.Knowledge.OpenAIPrompt)
-	}
+	openaiVoice := getOpenAIVoice(vars.APIConfig.Knowledge.OpenAIVoice)
 
 	// Create configuration
 	config := openai.DefaultConfig(strings.TrimSpace(vars.APIConfig.Knowledge.Key))
@@ -349,7 +343,6 @@ func DoSayText_OpenAI(robot *vector.Vector, input string) error {
 	}
 
 	// Create client with the configuration
-
 	client := openai.NewClientWithConfig(config)
 
 	resp, err := client.CreateSpeech(context.Background(), openai.CreateSpeechRequest{
@@ -481,7 +474,8 @@ func DoGetImage(msgs []openai.ChatCompletionMessage, param string, robot *vector
 	var fullRespSlice []string
 	var isDone bool
 	var c *openai.Client
-	if vars.APIConfig.Knowledge.Provider == "together" {
+	switch vars.APIConfig.Knowledge.Provider {
+	case "together":
 		if vars.APIConfig.Knowledge.Model == "" {
 			vars.APIConfig.Knowledge.Model = "meta-llama/Llama-2-70b-chat-hf"
 			vars.WriteConfigToDisk()
@@ -489,20 +483,24 @@ func DoGetImage(msgs []openai.ChatCompletionMessage, param string, robot *vector
 		conf := openai.DefaultConfig(vars.APIConfig.Knowledge.Key)
 		conf.BaseURL = "https://api.together.xyz/v1"
 		c = openai.NewClientWithConfig(conf)
-	} else if vars.APIConfig.Knowledge.Provider == "openai" {
+	case "openai":
 		c = openai.NewClient(vars.APIConfig.Knowledge.Key)
+	case "custom":
+		conf := openai.DefaultConfig(vars.APIConfig.Knowledge.Key)
+		conf.BaseURL = vars.APIConfig.Knowledge.Endpoint
+		c = openai.NewClientWithConfig(conf)
 	}
 	ctx := context.Background()
 	speakReady := make(chan string)
 
 	aireq := openai.ChatCompletionRequest{
-		MaxTokens:        2048,
-		Temperature:      1,
-		TopP:             1,
-		FrequencyPenalty: 0,
-		PresencePenalty:  0,
-		Messages:         msgs,
-		Stream:           true,
+		MaxCompletionTokens: 2048,
+		Temperature:         1,
+		TopP:                1,
+		FrequencyPenalty:    0,
+		PresencePenalty:     0,
+		Messages:            msgs,
+		Stream:              true,
 	}
 	if vars.APIConfig.Knowledge.Provider == "openai" {
 		aireq.Model = openai.GPT4oMini

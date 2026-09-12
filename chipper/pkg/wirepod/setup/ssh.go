@@ -68,7 +68,7 @@ func SetupBotViaSSH(ip string, key []byte) error {
 				ssh.PublicKeys(signer),
 			},
 			HostKeyCallback:   ssh.InsecureIgnoreHostKey(),
-			HostKeyAlgorithms: []string{"ssh-rsa"},
+			HostKeyAlgorithms: []string{"ssh-rsa", "ecdsa-sha2-nistp256"},
 			Timeout:           time.Second * 5,
 		}
 		client, err := ssh.Dial("tcp", ip+":22", config)
@@ -83,8 +83,24 @@ func SetupBotViaSSH(ip string, key []byte) error {
 		if !strings.Contains(output, "Vector") {
 			return doErr(fmt.Errorf("the remote device is not a vector"), "checking if vector")
 		}
+		SetupSSHStatus = "Checking if Vector is running CFW..."
+		// outputWired, _ := runCmd(client, "cat /etc/wired/webroot/index.html")
+		var doCloud bool = true
+		var initCommand string = "mount -o rw,remount / && mount -o rw,remount,exec /data && systemctl stop anki-robot.target mm-anki-camera mm-qcamera-daemon"
+		output, err = runCmd(client, "head -n1 /anki/bin/vic-gateway")
+		if err != nil {
+			if err.Error() == "Process exited with status 1" {
+				logger.Println("SSH setup: modern CFW detected, not copying vic-cloud")
+				//|| strings.Contains(outputWired, "revertDefaultWakeWord") {
+				initCommand = "mount -o rw,remount,exec /data && systemctl stop anki-robot.target mm-anki-camera mm-qcamera-daemon"
+				// my cfw already has a wire-pod compatible vic-cloud
+				doCloud = false
+			} else {
+				return doErr(err, "checking if cfw")
+			}
+		}
 		SetupSSHStatus = "Running initial commands before transfers (screen will go blank, this is normal)..."
-		_, err = runCmd(client, "mount -o rw,remount / && mount -o rw,remount,exec /data && systemctl stop anki-robot.target && mv /anki/data/assets/cozmo_resources/config/server_config.json /anki/data/assets/cozmo_resources/config/server_config.json.bak")
+		_, err = runCmd(client, initCommand)
 		if err != nil {
 			if !strings.Contains(err.Error(), "Process exited with status 1") {
 				return doErr(err, "initial commands")
@@ -106,7 +122,7 @@ func SetupBotViaSSH(ip string, key []byte) error {
 		if err != nil {
 			return doErr(err, "copying pod-bot-install")
 		}
-		scpClient.Session.Close()
+		scpClient.Close()
 		serverConfig, err := os.Open(vars.ServerConfigPath)
 		if err != nil {
 			return doErr(err, "opening server config on disk")
@@ -115,57 +131,59 @@ func SetupBotViaSSH(ip string, key []byte) error {
 		if err != nil {
 			return doErr(err, "new scp client 2")
 		}
-		err = scpClient.CopyFile(context.Background(), serverConfig, "/anki/data/assets/cozmo_resources/config/server_config.json", "0755")
+		err = scpClient.CopyFile(context.Background(), serverConfig, "/data/data/server_config.json", "0755")
 		if err != nil {
 			return doErr(err, "copying server-config.json")
 		}
-		scpClient.Session.Close()
-		if runtime.GOOS != "android" && !vars.Packaged {
-			cloud, err := os.Open("../vector-cloud/build/vic-cloud")
-			if err != nil {
-				return doErr(err, "transferring new vic-cloud")
-			}
-			SetupSSHStatus = "Transferring new vic-cloud..."
-			scpClient, err = scp.NewClientBySSH(client)
-			if err != nil {
-				return doErr(err, "new scp client 3")
-			}
-			err = scpClient.CopyFile(context.Background(), cloud, "/anki/bin/vic-cloud", "0755")
-			if err != nil {
-				time.Sleep(time.Second * 1)
+		scpClient.Close()
+		if doCloud {
+			if runtime.GOOS != "android" && !vars.Packaged {
+				cloud, err := os.Open("../vector-cloud/build/vic-cloud")
+				if err != nil {
+					return doErr(err, "transferring new vic-cloud")
+				}
+				SetupSSHStatus = "Transferring new vic-cloud..."
 				scpClient, err = scp.NewClientBySSH(client)
 				if err != nil {
-					return doErr(err, "copying vic-cloud")
+					return doErr(err, "new scp client 3")
 				}
 				err = scpClient.CopyFile(context.Background(), cloud, "/anki/bin/vic-cloud", "0755")
 				if err != nil {
-					return doErr(err, "copying vic-cloud")
+					time.Sleep(time.Second * 1)
+					scpClient, err = scp.NewClientBySSH(client)
+					if err != nil {
+						return doErr(err, "copying vic-cloud")
+					}
+					err = scpClient.CopyFile(context.Background(), cloud, "/anki/bin/vic-cloud", "0755")
+					if err != nil {
+						return doErr(err, "copying vic-cloud")
+					}
 				}
-			}
-		} else {
-			resp, _ := http.Get("https://github.com/kercre123/wire-pod/raw/main/vector-cloud/build/vic-cloud")
-			if err != nil {
-				return doErr(err, "transferring new vic-cloud")
-			}
-			SetupSSHStatus = "Transferring new vic-cloud..."
-			scpClient, err = scp.NewClientBySSH(client)
-			if err != nil {
-				return doErr(err, "new scp client 3")
-			}
-			err = scpClient.CopyFile(context.Background(), resp.Body, "/anki/bin/vic-cloud", "0755")
-			if err != nil {
-				time.Sleep(time.Second * 1)
+			} else {
+				resp, err := http.Get("https://github.com/kercre123/wire-pod/raw/main/vector-cloud/build/vic-cloud")
+				if err != nil {
+					return doErr(err, "transferring new vic-cloud (download)")
+				}
+				SetupSSHStatus = "Transferring new vic-cloud..."
 				scpClient, err = scp.NewClientBySSH(client)
 				if err != nil {
-					return doErr(err, "copying vic-cloud")
+					return doErr(err, "new scp client 3")
 				}
 				err = scpClient.CopyFile(context.Background(), resp.Body, "/anki/bin/vic-cloud", "0755")
 				if err != nil {
-					return doErr(err, "copying vic-cloud")
+					time.Sleep(time.Second * 1)
+					scpClient, err = scp.NewClientBySSH(client)
+					if err != nil {
+						return doErr(err, "copying vic-cloud")
+					}
+					err = scpClient.CopyFile(context.Background(), resp.Body, "/anki/bin/vic-cloud", "0755")
+					if err != nil {
+						return doErr(err, "copying vic-cloud")
+					}
 				}
 			}
 		}
-		scpClient.Session.Close()
+		scpClient.Close()
 		certPath := vars.CertPath
 		if vars.APIConfig.Server.EPConfig {
 			if runtime.GOOS == "android" || runtime.GOOS == "ios" {
@@ -182,17 +200,13 @@ func SetupBotViaSSH(ip string, key []byte) error {
 		if err != nil {
 			return doErr(err, "new scp client 4")
 		}
-		err = scpClient.CopyFile(context.Background(), cert, "/anki/etc/wirepod-cert.crt", "0755")
+		err = scpClient.CopyFile(context.Background(), cert, "/data/data/wirepod-cert.crt", "0755")
 		if err != nil {
 			return doErr(err, "copying wire-pod cert")
 		}
-		scpClient.Session.Close()
-		_, err = runCmd(client, "cp /anki/etc/wirepod-cert.crt /data/data/wirepod-cert.crt")
-		if err != nil {
-			return doErr(err, "copying wire-pod cert in robot")
-		}
+		scpClient.Close()
 		SetupSSHStatus = "Generating new robot certificate (this may take a while)..."
-		_, err = runCmd(client, "chmod +rwx /anki/data/assets/cozmo_resources/config/server_config.json /anki/bin/vic-cloud /data/data/wirepod-cert.crt /anki/etc/wirepod-cert.crt /data/pod-bot-install.sh && /data/pod-bot-install.sh")
+		_, err = runCmd(client, "chmod +rwx /data/data/server_config.json /data/data/wirepod-cert.crt /data/pod-bot-install.sh && /data/pod-bot-install.sh")
 		if err != nil {
 			return doErr(err, "generating new robot cert")
 		}
@@ -218,7 +232,7 @@ func SSHSetup(w http.ResponseWriter, r *http.Request) {
 			fmt.Fprint(w, "error: must provide ssh key ("+err.Error()+")")
 			return
 		}
-		keyBytes, _ := io.ReadAll(key)
+		keyBytes, err := io.ReadAll(key)
 		if len(keyBytes) < 5 {
 			fmt.Fprint(w, "error: must provide ssh key ("+err.Error()+")")
 			return

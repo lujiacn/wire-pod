@@ -21,21 +21,23 @@ type apiConfig struct {
 		Unit     string `json:"unit"`
 	} `json:"weather"`
 	Knowledge struct {
-		Enable                 bool   `json:"enable"`
-		Provider               string `json:"provider"`
-		Key                    string `json:"key"`
-		ID                     string `json:"id"`
-		Model                  string `json:"model"`
-		IntentGraph            bool   `json:"intentgraph"`
-		RobotName              string `json:"robotName"`
-		OpenAIPrompt           string `json:"openai_prompt"`
-		OpenAIVoice            string `json:"openai_voice"`
-		OpenAIBase             string `json:"openai_base"`
-		SaveChat               bool   `json:"save_chat"`
-		SaveChatNum            int    `json:"save_chat_num"`
-		CommandsEnable         bool   `json:"commands_enable"`
-		Endpoint               string `json:"endpoint"`
-		OpenAIVoiceWithEnglish bool   `json:"openai_voice_with_english"`
+		Enable                 bool    `json:"enable"`
+		Provider               string  `json:"provider"`
+		Key                    string  `json:"key"`
+		ID                     string  `json:"id"`
+		Model                  string  `json:"model"`
+		IntentGraph            bool    `json:"intentgraph"`
+		RobotName              string  `json:"robotName"`
+		OpenAIPrompt           string  `json:"openai_prompt"`
+		OpenAIVoice            string  `json:"openai_voice"`
+		OpenAIBase             string  `json:"openai_base"`
+		OpenAIVoiceWithEnglish bool    `json:"openai_voice_with_english"`
+		SaveChat               bool    `json:"save_chat"`
+		SaveChatNum            int     `json:"save_chat_num"`
+		CommandsEnable         bool    `json:"commands_enable"`
+		Endpoint               string  `json:"endpoint"`
+		TopP                   float32 `json:"top_p"`
+		Temperature            float32 `json:"temp"`
 	} `json:"knowledge"`
 	STT struct {
 		Service  string `json:"provider"`
