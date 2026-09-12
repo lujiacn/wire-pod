@@ -344,8 +344,8 @@ func DoPlaySound(sound string, robot *vector.Vector) error {
 	return nil
 }
 
-// motor actions require a unique nonzero id tag per action
-var actionTagCounter int32 = 0
+// motor actions require a unique id tag in the SDK range (2000001-3000000)
+var actionTagCounter int32 = 2000000
 
 func NextActionTag() int32 {
 	return atomic.AddInt32(&actionTagCounter, 1)
