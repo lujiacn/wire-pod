@@ -68,30 +68,46 @@ func houndifyKG(req sr.SpeechRequest) string {
 	return apiResponse
 }
 
-func streamingKG(req *vtt.KnowledgeGraphRequest, speechReq sr.SpeechRequest) string {
-	// as soon as the request comes in (bot was woken up with "hi vector" and
-	// started listening), capture a silent environment photo in parallel with
-	// transcription, so the LLM can answer using both the user input and what
-	// the robot sees
+// startEnvPhotoCapture kicks off a silent environment photo capture in the
+// background (when the photo-send setting is on and wanted), returning a
+// buffered channel that yields the base64-encoded photo, or "" when disabled
+// or on failure.
+func startEnvPhotoCapture(esn string, want bool) chan string {
 	photoCh := make(chan string, 1)
-	if vars.APIConfig.Knowledge.Enable && vars.APIConfig.Knowledge.PhotoSend {
+	if want && vars.APIConfig.Knowledge.Enable && vars.APIConfig.Knowledge.PhotoSend {
 		go func() {
-			photoCh <- ttr.CaptureEnvPhoto(speechReq.Device)
+			photoCh <- ttr.CaptureEnvPhoto(esn)
 		}()
 	} else {
 		photoCh <- ""
 	}
-	// have him start "thinking" right after the text is transcribed
-	transcribedText, err := sttHandler(speechReq)
-	if err != nil {
-		return "There was an error."
-	}
+	return photoCh
+}
+
+// waitEnvPhoto waits up to 5 seconds for the background photo capture to
+// finish, so a slow capture never stalls the request.
+func waitEnvPhoto(photoCh chan string) string {
 	var photoB64 string
 	select {
 	case photoB64 = <-photoCh:
 	case <-time.After(5 * time.Second):
 		logger.Println("(photo) timed out waiting for photo, continuing without it")
 	}
+	return photoB64
+}
+
+func streamingKG(req *vtt.KnowledgeGraphRequest, speechReq sr.SpeechRequest) string {
+	// as soon as the request comes in (bot was woken up with "hi vector" and
+	// started listening), capture a silent environment photo in parallel with
+	// transcription, so the LLM can answer using both the user input and what
+	// the robot sees
+	photoCh := startEnvPhotoCapture(speechReq.Device, true)
+	// have him start "thinking" right after the text is transcribed
+	transcribedText, err := sttHandler(speechReq)
+	if err != nil {
+		return "There was an error."
+	}
+	photoB64 := waitEnvPhoto(photoCh)
 	kg := pb.KnowledgeGraphResponse{
 		Session:     req.Session,
 		DeviceId:    req.Device,

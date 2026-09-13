@@ -216,9 +216,9 @@ func CreateAIReq(transcribedText, esn string, gpt3tryagain, isKG bool, photoB64 
 }
 
 func StreamingKGSim(req interface{}, esn string, transcribedText string, isKG bool, photoB64 string) (string, error) {
-	start := make(chan bool)
-	stop := make(chan bool)
-	stopStop := make(chan bool)
+	start := make(chan bool, 1)
+	stop := make(chan bool, 2)
+	stopStop := make(chan bool, 2)
 	kgReadyToAnswer := make(chan bool)
 	kgStopLooping := false
 	ctx := context.Background()
@@ -446,7 +446,15 @@ func StreamingKGSim(req interface{}, esn string, transcribedText string, isKG bo
 
 	var stopTTSLoop bool
 	TTSLoopStopped := make(chan bool)
-	for range start {
+	// wait for behavior control, but don't hang forever if the robot never
+	// grants it (e.g. it is busy executing the greeting intent that was just
+	// sent to it)
+	select {
+	case <-start:
+	case <-time.After(8 * time.Second):
+		logger.Println("KGSim: behavior control was not granted after 8 seconds, continuing anyway (robot may stay silent)")
+	}
+	{
 		if isKG {
 			kgStopLooping = true
 			for range kgReadyToAnswer {

@@ -14,6 +14,12 @@ func (s *Server) ProcessIntentGraph(req *vtt.IntentGraphRequest) (*vtt.IntentGra
 	var successMatched bool
 	speechReq := sr.ReqToSpeechRequest(req)
 	var transcribedText string
+	// if the request may end up at the LLM (always-LLM or IntentGraph
+	// fallback), capture a silent environment photo in parallel with
+	// transcription, so the LLM can answer based on what the robot sees
+	llmPlausible := vars.APIConfig.Knowledge.Enable && vars.APIConfig.Knowledge.Provider != "houndify" &&
+		(vars.APIConfig.Knowledge.AlwaysLLM || vars.APIConfig.Knowledge.IntentGraph)
+	photoCh := startEnvPhotoCapture(req.Device, llmPlausible)
 	if !isSti {
 		var err error
 		transcribedText, err = sttHandler(speechReq)
@@ -30,7 +36,7 @@ func (s *Server) ProcessIntentGraph(req *vtt.IntentGraphRequest) (*vtt.IntentGra
 			// is much more accurate than the internal intent matching. if the
 			// LLM is not accessible, fall back to the internal intents
 			logger.Println("Making LLM request for device " + req.Device + " (always-LLM mode)...")
-			_, llmErr := ttr.StreamingKGSim(req, req.Device, transcribedText, false, "")
+			_, llmErr := ttr.StreamingKGSim(req, req.Device, transcribedText, false, waitEnvPhoto(photoCh))
 			if llmErr != nil {
 				logger.Println("LLM error: " + llmErr.Error())
 				logger.LogUI("LLM error: " + llmErr.Error())
@@ -95,7 +101,7 @@ func (s *Server) ProcessIntentGraph(req *vtt.IntentGraphRequest) (*vtt.IntentGra
 				}
 			} else {
 				logger.Println("Making LLM request for device " + req.Device + "...")
-				_, err := ttr.StreamingKGSim(req, req.Device, transcribedText, false, "")
+				_, err := ttr.StreamingKGSim(req, req.Device, transcribedText, false, waitEnvPhoto(photoCh))
 				if err != nil {
 					logger.Println("LLM error: " + err.Error())
 					logger.LogUI("LLM error: " + err.Error())
