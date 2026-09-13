@@ -31,6 +31,10 @@ const (
 	qwenTTSDefaultModel  = "qwen3-tts-flash"
 	qwenTTSDefaultVoice  = "Momo"
 	qwenTTSSampleRateOut = 16000
+	// synthesis volume sent with every request (parameters.volume,
+	// 0-100). This is a per-call setting: it takes effect immediately and
+	// never touches the cloud voice resource itself.
+	qwenTTSDefaultVolume = 100
 	// used when the model is qwen3-tts-instruct-flash and the user did not
 	// configure custom instructions: nudge the voice toward Vector's style
 	// (cute little robot, slightly fast and high-pitched)
@@ -62,23 +66,41 @@ type qwenTTSResp struct {
 }
 
 // CosyVoice uses a different endpoint and request shape than the Qwen-TTS
-// family (no language_type/instructions; wav format + sample rate are set
-// explicitly).
+// family (no language_type/instructions; format/sample_rate/volume live in
+// the "parameters" object per the DashScope SpeechSynthesizer API).
 type cosyVoiceInput struct {
-	Text       string `json:"text"`
-	Voice      string `json:"voice"`
+	Text  string `json:"text"`
+	Voice string `json:"voice"`
+}
+
+type cosyVoiceParams struct {
+	TextType   string `json:"text_type"`
 	Format     string `json:"format"`
 	SampleRate int    `json:"sample_rate"`
+	Volume     int    `json:"volume"`
 }
 
 type cosyVoiceReq struct {
-	Model string         `json:"model"`
-	Input cosyVoiceInput `json:"input"`
+	Model      string          `json:"model"`
+	Input      cosyVoiceInput  `json:"input"`
+	Parameters cosyVoiceParams `json:"parameters"`
 }
 
 // QwenTTSActive returns true if a DashScope API key is configured for Qwen TTS.
 func QwenTTSActive() bool {
 	return vars.APIConfig.TTS.Service == "qwen" && strings.TrimSpace(vars.APIConfig.TTS.Key) != ""
+}
+
+// ttsVolume normalizes the configured synthesis volume: 0/unset means the
+// default (max loudness), anything above 100 is capped.
+func ttsVolume(v int) int {
+	if v <= 0 {
+		return qwenTTSDefaultVolume
+	}
+	if v > 100 {
+		return 100
+	}
+	return v
 }
 
 // QwenTTSLanguageInstruction returns the system-prompt snippet describing
@@ -197,19 +219,28 @@ func DoSayText_Qwen(robot *vector.Vector, input string) error {
 		instructions = qwenTTSDefaultInstructions
 	}
 
+	// per-request volume (0-100): 0/unset means max. Applies to this
+	// synthesis call only - the cloned voice on the cloud side stays
+	// untouched.
+	volume := ttsVolume(tts.Volume)
+
 	reqBodyLog := "(Qwen TTS) requesting speech, model: " + model + ", voice: " + voice
 	var audioBytes []byte
 	var err error
 	if strings.HasPrefix(model, "cosyvoice") {
 		// CosyVoice family: SpeechSynthesizer endpoint, different request shape
-		reqBodyLog += " (CosyVoice endpoint)"
+		reqBodyLog += fmt.Sprintf(" (CosyVoice endpoint, volume %d)", volume)
 		bodyBytes, marshalErr := json.Marshal(cosyVoiceReq{
 			Model: model,
 			Input: cosyVoiceInput{
-				Text:       input,
-				Voice:      voice,
+				Text:  input,
+				Voice: voice,
+			},
+			Parameters: cosyVoiceParams{
+				TextType:   "PlainText",
 				Format:     "wav",
 				SampleRate: 24000,
+				Volume:     volume,
 			},
 		})
 		if marshalErr != nil {

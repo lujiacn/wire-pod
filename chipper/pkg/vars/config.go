@@ -59,6 +59,9 @@ type apiConfig struct {
 		Key     string `json:"key"`     // DashScope API key
 		Model   string `json:"model"`   // e.g. qwen3-tts-flash or qwen3-tts-instruct-flash
 		Voice   string `json:"voice"`   // e.g. Momo, Cherry, Serena, Ethan, Chelsie, Vivian, Moon
+		// synthesis volume, 0-100, sent per request (parameters.volume); the
+		// cloud voice itself is never modified. 0/unset = 100 (max).
+		Volume int `json:"volume"`
 		// "cn" = dashscope.aliyuncs.com (mainland China), "intl" = dashscope-intl.aliyuncs.com
 		Region string `json:"region"`
 		// "auto" = only speak text containing Chinese via the API (English keeps

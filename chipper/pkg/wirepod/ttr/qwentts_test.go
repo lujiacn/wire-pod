@@ -2,6 +2,7 @@ package wirepod_ttr
 
 import (
 	"encoding/binary"
+	"encoding/json"
 	"testing"
 )
 
@@ -110,5 +111,68 @@ func TestChunkPCM16k(t *testing.T) {
 	}
 	if total < len(in)-1024 {
 		t.Fatalf("chunked %d bytes from %d input bytes", total, len(in))
+	}
+}
+
+func TestTTSVolume(t *testing.T) {
+	// 0/unset falls back to the default (max loudness), >100 is capped
+	for _, c := range []struct{ in, want int }{
+		{0, 100}, {-5, 100}, {1, 1}, {50, 50}, {100, 100}, {150, 100},
+	} {
+		if got := ttsVolume(c.in); got != c.want {
+			t.Fatalf("ttsVolume(%d) = %d, want %d", c.in, got, c.want)
+		}
+	}
+}
+
+func TestCosyVoiceRequestJSON(t *testing.T) {
+	// the CosyVoice request must carry format/sample_rate/volume under
+	// "parameters" (SpeechSynthesizer API shape), not under "input"
+	req := cosyVoiceReq{
+		Model: "cosyvoice-v3.5-plus",
+		Input: cosyVoiceInput{
+			Text:  "你好，我是塔斯。",
+			Voice: "cosyvoice-v3.5-plus-tars-289668f821ea4c26bd02158a0c5b021a",
+		},
+		Parameters: cosyVoiceParams{
+			TextType:   "PlainText",
+			Format:     "wav",
+			SampleRate: 24000,
+			Volume:     100,
+		},
+	}
+	b, err := json.Marshal(req)
+	if err != nil {
+		t.Fatalf("marshal error: %v", err)
+	}
+	var m map[string]any
+	if err := json.Unmarshal(b, &m); err != nil {
+		t.Fatalf("unmarshal error: %v", err)
+	}
+	params, ok := m["parameters"].(map[string]any)
+	if !ok {
+		t.Fatalf("missing parameters object: %s", b)
+	}
+	if params["volume"] != float64(100) {
+		t.Fatalf("parameters.volume = %v, want 100", params["volume"])
+	}
+	if params["format"] != "wav" {
+		t.Fatalf("parameters.format = %v, want wav", params["format"])
+	}
+	if params["sample_rate"] != float64(24000) {
+		t.Fatalf("parameters.sample_rate = %v, want 24000", params["sample_rate"])
+	}
+	input, ok := m["input"].(map[string]any)
+	if !ok {
+		t.Fatalf("missing input object: %s", b)
+	}
+	if input["voice"] == "" || input["text"] == "" {
+		t.Fatalf("input must contain text and voice: %s", b)
+	}
+	if _, dup := input["format"]; dup {
+		t.Fatalf("input must not carry format (moved to parameters)")
+	}
+	if _, dup := input["sample_rate"]; dup {
+		t.Fatalf("input must not carry sample_rate (moved to parameters)")
 	}
 }
