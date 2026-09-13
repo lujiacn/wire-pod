@@ -343,7 +343,8 @@ func StreamingKGSim(req interface{}, esn string, transcribedText string, isKG bo
 	}()
 	// watch for barge-in triggers (wake word / touch) while the response is
 	// being generated and spoken
-	go InterruptKGSimWhenTouchedOrWaked(robot, respCancel, stopStop)
+	bstate := &bargeInState{}
+	go InterruptKGSimWhenTouchedOrWaked(robot, respCancel, stopStop, bstate)
 	go func() {
 		for {
 			if respCtx.Err() != nil {
@@ -411,6 +412,11 @@ func StreamingKGSim(req interface{}, esn string, transcribedText string, isKG bo
 			}
 
 			if err != nil {
+				if respCtx.Err() != nil {
+					// stream was closed because the response was
+					// interrupted - not an error
+					return
+				}
 				logger.Println("Stream error: " + err.Error())
 				return
 			}
@@ -527,6 +533,9 @@ func StreamingKGSim(req interface{}, esn string, transcribedText string, isKG bo
 		}
 		var disconnect bool
 		numInResp := 0
+		// the robot is about to say the first sentence - from here on, a
+		// wake word event counts as barge-in (see bargeInState)
+		bstate.markSpeaking()
 	sentenceLoop:
 		for {
 			respSlice := fullRespSlice

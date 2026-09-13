@@ -89,12 +89,44 @@ func UnregisterActiveResponse(esn string, resp *activeResponse) {
 	activeResponsesMu.Unlock()
 }
 
+// bargeInState tracks whether the robot has actually started speaking the
+// response. The wake word event that triggers the request itself (and
+// duplicates/re-triggers of it around the greeting intent) must not be
+// treated as barge-in - only wake words detected while the robot is
+// audibly speaking, at least wakeWordGrace after speech began.
+type bargeInState struct {
+	mu           sync.Mutex
+	speakStarted bool
+	startedAt    time.Time
+}
+
+// wakeWordGrace is how long after the robot starts speaking a wake word
+// event is still ignored, so late/repeated wake events from the request
+// startup cannot kill the response before the user hears anything.
+const wakeWordGrace = 1500 * time.Millisecond
+
+func (b *bargeInState) markSpeaking() {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if !b.speakStarted {
+		b.speakStarted = true
+		b.startedAt = time.Now()
+	}
+}
+
+func (b *bargeInState) wakeWordCanInterrupt() bool {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.speakStarted && time.Since(b.startedAt) > wakeWordGrace
+}
+
 // InterruptKGSimWhenTouchedOrWaked watches the robot's event stream while an
-// LLM response is being spoken. If the user says the wake word or presses the
-// button (touch sensor), it cancels the response context, which stops the
-// speech mid-sentence. Returns true if it triggered an interrupt, false if
-// it exited because the response ended normally (stopStop was signalled).
-func InterruptKGSimWhenTouchedOrWaked(rob *vector.Vector, cancel context.CancelFunc, stopStop chan bool) bool {
+// LLM response is being spoken. If the user says the wake word while the
+// robot is speaking, or presses the button (touch sensor), it cancels the
+// response context, which stops the speech mid-sentence. Returns true if it
+// triggered an interrupt, false if it exited because the response ended
+// normally (stopStop was signalled).
+func InterruptKGSimWhenTouchedOrWaked(rob *vector.Vector, cancel context.CancelFunc, stopStop chan bool, bstate *bargeInState) bool {
 	strm, err := rob.Conn.EventStream(
 		context.Background(),
 		&vectorpb.EventRequest{
@@ -158,9 +190,12 @@ func InterruptKGSimWhenTouchedOrWaked(rob *vector.Vector, cancel context.CancelF
 				return true
 			}
 		case *vectorpb.Event_WakeWord:
-			logger.Println("Interrupting LLM response (source: wake word)")
-			cancel()
-			return true
+			if bstate.wakeWordCanInterrupt() {
+				logger.Println("Interrupting LLM response (source: wake word)")
+				cancel()
+				return true
+			}
+			logger.Println("(barge-in) ignoring wake word event (robot has not been speaking long enough)")
 		default:
 		}
 	}
