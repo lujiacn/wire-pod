@@ -547,16 +547,21 @@ func DoTurn(param string, robot *vector.Vector) error {
 	return nil
 }
 
-func DoSayText(input string, robot *vector.Vector) error {
+func DoSayText(ctx context.Context, input string, robot *vector.Vector) error {
 	// just before vector speaks
 	input = removeSpecialCharacters(input)
+
+	// if the response was interrupted, say nothing
+	if ctx.Err() != nil {
+		return nil
+	}
 
 	// Qwen3-TTS (DashScope): API-based speech so the robot can speak Chinese.
 	// In "auto" mode only text containing Chinese characters uses it, so
 	// English keeps the robot's built-in Vector voice.
 	if QwenTTSActive() {
 		if vars.APIConfig.TTS.Mode == "all" || containsCJK(input) {
-			err := DoSayText_Qwen(robot, input)
+			err := DoSayText_Qwen(robot, input, ctx)
 			if err == nil {
 				return nil
 			}
@@ -566,12 +571,15 @@ func DoSayText(input string, robot *vector.Vector) error {
 	}
 
 	if (vars.APIConfig.STT.Language != "en-US" && vars.APIConfig.Knowledge.Provider == "openai") || vars.APIConfig.Knowledge.OpenAIVoiceWithEnglish {
-		err := DoSayText_OpenAI(robot, input)
+		err := DoSayText_OpenAI(robot, input, ctx)
 		return err
 	}
 
+	if ctx.Err() != nil {
+		return nil
+	}
 	robot.Conn.SayText(
-		context.Background(),
+		ctx,
 		&vectorpb.SayTextRequest{
 			Text:           input,
 			UseVectorVoice: true,
@@ -604,8 +612,78 @@ func getOpenAIVoice(voice string) openai.SpeechVoice {
 }
 
 // TODO: done
-func DoSayText_OpenAI(robot *vector.Vector, input string) error {
+// playExternalAudioStream plays 16 kHz PCM chunks on the robot's speaker
+// through an external audio stream. Playback can be cut short by cancelling
+// ctx (barge-in): the chunk sender aborts and the stream is closed, which
+// stops the audio on the robot immediately. Blocks until the audio has fully
+// played or ctx is cancelled, so callers can pace sentence-by-sentence.
+func playExternalAudioStream(ctx context.Context, robot *vector.Vector, audioChunks [][]byte) error {
+	vclient, err := robot.Conn.ExternalAudioStreamPlayback(context.Background())
+	if err != nil {
+		return err
+	}
+	vclient.Send(&vectorpb.ExternalAudioStreamRequest{
+		AudioRequestType: &vectorpb.ExternalAudioStreamRequest_AudioStreamPrepare{
+			AudioStreamPrepare: &vectorpb.ExternalAudioStreamPrepare{
+				AudioFrameRate: 16000,
+				AudioVolume:    100,
+			},
+		},
+	})
+	// closing the stream stops the audio on the robot right away
+	cutPlayback := func() {
+		vclient.CloseSend()
+	}
+	go func() {
+		for _, chunk := range audioChunks {
+			select {
+			case <-ctx.Done():
+				cutPlayback()
+				return
+			default:
+			}
+			vclient.Send(&vectorpb.ExternalAudioStreamRequest{
+				AudioRequestType: &vectorpb.ExternalAudioStreamRequest_AudioStreamChunk{
+					AudioStreamChunk: &vectorpb.ExternalAudioStreamChunk{
+						AudioChunkSizeBytes: 1024,
+						AudioChunkSamples:   chunk,
+					},
+				},
+			})
+			select {
+			case <-time.After(time.Millisecond * 25):
+			case <-ctx.Done():
+				cutPlayback()
+				return
+			}
+		}
+		vclient.Send(&vectorpb.ExternalAudioStreamRequest{
+			AudioRequestType: &vectorpb.ExternalAudioStreamRequest_AudioStreamComplete{
+				AudioStreamComplete: &vectorpb.ExternalAudioStreamComplete{},
+			},
+		})
+	}()
+	// wait for playback to finish (so the next sentence doesn't talk over
+	// this one), unless the response gets interrupted
+	var totalBytes int
+	for _, chunk := range audioChunks {
+		totalBytes += len(chunk)
+	}
+	// 16 kHz, 16-bit mono: 32000 bytes per second
+	playDuration := time.Duration(totalBytes)*time.Millisecond/32 + (time.Millisecond * 50)
+	select {
+	case <-time.After(playDuration):
+	case <-ctx.Done():
+		cutPlayback()
+	}
+	return nil
+}
+
+func DoSayText_OpenAI(robot *vector.Vector, input string, ctx context.Context) error {
 	if strings.TrimSpace(input) == "" {
+		return nil
+	}
+	if ctx.Err() != nil {
 		return nil
 	}
 	openaiVoice := getOpenAIVoice(vars.APIConfig.Knowledge.OpenAIVoice)
@@ -621,7 +699,7 @@ func DoSayText_OpenAI(robot *vector.Vector, input string) error {
 	// Create client with the configuration
 	client := openai.NewClientWithConfig(config)
 
-	resp, err := client.CreateSpeech(context.Background(), openai.CreateSpeechRequest{
+	resp, err := client.CreateSpeech(ctx, openai.CreateSpeechRequest{
 		Model:          openai.TTSModel1,
 		Input:          input,
 		Voice:          openaiVoice,
@@ -633,65 +711,28 @@ func DoSayText_OpenAI(robot *vector.Vector, input string) error {
 		return err
 	}
 	speechBytes, _ := io.ReadAll(resp)
-	vclient, err := robot.Conn.ExternalAudioStreamPlayback(context.Background())
-	if err != nil {
-		return err
-	}
-	vclient.Send(&vectorpb.ExternalAudioStreamRequest{
-		AudioRequestType: &vectorpb.ExternalAudioStreamRequest_AudioStreamPrepare{
-			AudioStreamPrepare: &vectorpb.ExternalAudioStreamPrepare{
-				AudioFrameRate: 16000,
-				AudioVolume:    100,
-			},
-		},
-	})
-	//time.Sleep(time.Millisecond * 30)
 	audioChunks := downsample24kTo16k(speechBytes)
-
-	var chunksToDetermineLength []byte
-	for _, chunk := range audioChunks {
-		chunksToDetermineLength = append(chunksToDetermineLength, chunk...)
+	if len(audioChunks) == 0 {
+		return nil
 	}
-	go func() {
-		for _, chunk := range audioChunks {
-			vclient.Send(&vectorpb.ExternalAudioStreamRequest{
-				AudioRequestType: &vectorpb.ExternalAudioStreamRequest_AudioStreamChunk{
-					AudioStreamChunk: &vectorpb.ExternalAudioStreamChunk{
-						AudioChunkSizeBytes: 1024,
-						AudioChunkSamples:   chunk,
-					},
-				},
-			})
-			time.Sleep(time.Millisecond * 25)
-		}
-		vclient.Send(&vectorpb.ExternalAudioStreamRequest{
-			AudioRequestType: &vectorpb.ExternalAudioStreamRequest_AudioStreamComplete{
-				AudioStreamComplete: &vectorpb.ExternalAudioStreamComplete{},
-			},
-		})
-	}()
-	time.Sleep(pcmLength(chunksToDetermineLength) + (time.Millisecond * 50))
-	return nil
+	return playExternalAudioStream(ctx, robot, audioChunks)
 }
 
-func DoGetImage(msgs []openai.ChatCompletionMessage, param string, robot *vector.Vector, stopStop chan bool) {
-	stopImaging := false
-	go func() {
-		for range stopStop {
-			stopImaging = true
-			break
-		}
-	}()
+func DoGetImage(ctx context.Context, msgs []openai.ChatCompletionMessage, param string, robot *vector.Vector) {
+	stopImaging := func() bool { return ctx.Err() != nil }
 	logger.Println("Get image here...")
 	// get image
 	robot.Conn.EnableMirrorMode(context.Background(), &vectorpb.EnableMirrorModeRequest{
 		Enable: true,
 	})
 	for i := 3; i > 0; i-- {
-		if stopImaging {
+		if stopImaging() {
 			return
 		}
 		time.Sleep(time.Millisecond * 300)
+		if stopImaging() {
+			return
+		}
 		robot.Conn.SayText(
 			context.Background(),
 			&vectorpb.SayTextRequest{
@@ -700,7 +741,7 @@ func DoGetImage(msgs []openai.ChatCompletionMessage, param string, robot *vector
 				DurationScalar: 1.05,
 			},
 		)
-		if stopImaging {
+		if stopImaging() {
 			return
 		}
 	}
@@ -766,7 +807,6 @@ func DoGetImage(msgs []openai.ChatCompletionMessage, param string, robot *vector
 		conf.BaseURL = vars.APIConfig.Knowledge.Endpoint
 		c = openai.NewClientWithConfig(conf)
 	}
-	ctx := context.Background()
 	speakReady := make(chan string)
 
 	aireq := openai.ChatCompletionRequest{
@@ -785,7 +825,7 @@ func DoGetImage(msgs []openai.ChatCompletionMessage, param string, robot *vector
 		logger.Println("Using " + vars.APIConfig.Knowledge.Model)
 		aireq.Model = vars.APIConfig.Knowledge.Model
 	}
-	if stopImaging {
+	if stopImaging() {
 		return
 	}
 	stream, err := c.CreateChatCompletionStream(ctx, aireq)
@@ -889,26 +929,31 @@ func DoGetImage(msgs []openai.ChatCompletionMessage, param string, robot *vector
 	}()
 	numInResp := 0
 	for {
-		if stopImaging {
+		if stopImaging() {
 			return
 		}
 		respSlice := fullRespSlice
 		if len(respSlice)-1 < numInResp {
 			if !isDone {
 				logger.Println("Waiting for more content from LLM...")
-				for range speakReady {
+				select {
+				case <-speakReady:
 					respSlice = fullRespSlice
-					break
+				case <-ctx.Done():
+					return
 				}
 			} else {
 				break
 			}
 		}
+		if stopImaging() {
+			return
+		}
 		logger.Println(respSlice[numInResp])
 		acts := GetActionsFromString(respSlice[numInResp])
-		PerformActions(msgs, acts, robot, stopStop)
+		PerformActions(ctx, msgs, acts, robot)
 		numInResp = numInResp + 1
-		if stopImaging {
+		if stopImaging() {
 			return
 		}
 	}
@@ -919,21 +964,17 @@ func DoNewRequest(robot *vector.Vector) {
 	robot.Conn.AppIntent(context.Background(), &vectorpb.AppIntentRequest{Intent: "knowledge_question"})
 }
 
-func PerformActions(msgs []openai.ChatCompletionMessage, actions []RobotAction, robot *vector.Vector, stopStop chan bool) bool {
-	// assuming we have behavior control already
-	stopPerforming := false
-	go func() {
-		for range stopStop {
-			stopPerforming = true
-		}
-	}()
+func PerformActions(ctx context.Context, msgs []openai.ChatCompletionMessage, actions []RobotAction, robot *vector.Vector) bool {
+	// assuming we have behavior control already; if the response gets
+	// interrupted (ctx cancelled), abort the remaining actions immediately
 	for _, action := range actions {
-		if stopPerforming {
+		if ctx.Err() != nil {
+			StopAnim_Queue(robot.Cfg.SerialNo)
 			return false
 		}
 		switch {
 		case action.Action == ActionSayText:
-			DoSayText(action.Parameter, robot)
+			DoSayText(ctx, action.Parameter, robot)
 		case action.Action == ActionPlayAnimation:
 			DoPlayAnimation(action.Parameter, robot)
 		case action.Action == ActionPlayAnimationWI:
@@ -942,7 +983,7 @@ func PerformActions(msgs []openai.ChatCompletionMessage, actions []RobotAction, 
 			go DoNewRequest(robot)
 			return true
 		case action.Action == ActionGetImage:
-			DoGetImage(msgs, action.Parameter, robot, stopStop)
+			DoGetImage(ctx, msgs, action.Parameter, robot)
 			return true
 		case action.Action == ActionPlaySound:
 			DoPlaySound(action.Parameter, robot)
@@ -959,6 +1000,12 @@ func PerformActions(msgs []openai.ChatCompletionMessage, actions []RobotAction, 
 		case action.Action == ActionTurn:
 			DoTurn(action.Parameter, robot)
 		}
+	}
+	if ctx.Err() != nil {
+		// interrupted - unblock any animation waiter instead of waiting out
+		// the current animation
+		StopAnim_Queue(robot.Cfg.SerialNo)
+		return false
 	}
 	WaitForAnim_Queue(robot.Cfg.SerialNo)
 	return false

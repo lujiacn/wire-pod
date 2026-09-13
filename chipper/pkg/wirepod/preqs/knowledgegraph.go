@@ -136,6 +136,9 @@ func KgRequest(req *vtt.KnowledgeGraphRequest, speechReq sr.SpeechRequest) strin
 func (s *Server) ProcessKnowledgeGraph(req *vtt.KnowledgeGraphRequest) (*vtt.KnowledgeGraphResponse, error) {
 	InitKnowledge()
 	speechReq := sr.ReqToSpeechRequest(req)
+	// barge-in: the user just spoke - interrupt any LLM response the robot
+	// is still saying, so it stops talking and reacts to the new input
+	ttr.CancelActiveResponse(req.Device)
 	if vars.APIConfig.Knowledge.Enable && vars.APIConfig.Knowledge.Provider != "houndify" {
 		streamingKG(req, speechReq)
 	} else {

@@ -14,7 +14,6 @@ import (
 	"time"
 
 	"github.com/fforchino/vector-go-sdk/pkg/vector"
-	"github.com/fforchino/vector-go-sdk/pkg/vectorpb"
 	"github.com/kercre123/wire-pod/chipper/pkg/logger"
 	"github.com/kercre123/wire-pod/chipper/pkg/vars"
 )
@@ -145,9 +144,10 @@ func qwenBaseURL(region string) string {
 
 // dashScopeRequest posts a synthesis request and returns the WAV audio bytes.
 // The Qwen-TTS family returns an URL to a WAV file; CosyVoice returns the WAV
-// inline as base64 - both shapes are handled here.
-func dashScopeRequest(url, key string, body []byte) ([]byte, error) {
-	req, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(body))
+// inline as base64 - both shapes are handled here. The request is aborted if
+// ctx is cancelled (barge-in).
+func dashScopeRequest(ctx context.Context, url, key string, body []byte) ([]byte, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
 	if err != nil {
 		return nil, err
 	}
@@ -175,7 +175,7 @@ func dashScopeRequest(url, key string, body []byte) ([]byte, error) {
 		return nil, fmt.Errorf("dashscope returned no audio (code: %s, message: %s)", qresp.Code, qresp.Message)
 	}
 	if qresp.Output.Audio.URL != "" {
-		audioReq, err := http.NewRequest(http.MethodGet, qresp.Output.Audio.URL, nil)
+		audioReq, err := http.NewRequestWithContext(ctx, http.MethodGet, qresp.Output.Audio.URL, nil)
 		if err != nil {
 			return nil, err
 		}
@@ -193,9 +193,10 @@ func dashScopeRequest(url, key string, body []byte) ([]byte, error) {
 }
 
 // DoSayText_Qwen synthesizes text with Qwen3-TTS and plays it on the robot.
-func DoSayText_Qwen(robot *vector.Vector, input string) error {
+// If ctx is cancelled mid-playback (barge-in), the audio stops immediately.
+func DoSayText_Qwen(robot *vector.Vector, input string, ctx context.Context) error {
 	input = strings.TrimSpace(input)
-	if input == "" {
+	if input == "" || ctx.Err() != nil {
 		return nil
 	}
 	tts := vars.APIConfig.TTS
@@ -247,6 +248,7 @@ func DoSayText_Qwen(robot *vector.Vector, input string) error {
 			return marshalErr
 		}
 		audioBytes, err = dashScopeRequest(
+			ctx,
 			qwenBaseURL(tts.Region)+"/services/audio/tts/SpeechSynthesizer",
 			tts.Key, bodyBytes)
 	} else {
@@ -267,6 +269,7 @@ func DoSayText_Qwen(robot *vector.Vector, input string) error {
 			return marshalErr
 		}
 		audioBytes, err = dashScopeRequest(
+			ctx,
 			qwenBaseURL(tts.Region)+"/services/aigc/multimodal-generation/generation",
 			tts.Key, bodyBytes)
 	}
@@ -293,43 +296,8 @@ func DoSayText_Qwen(robot *vector.Vector, input string) error {
 		return errors.New("qwen tts produced no audio")
 	}
 
-	vclient, err := robot.Conn.ExternalAudioStreamPlayback(context.Background())
-	if err != nil {
-		return err
-	}
-	vclient.Send(&vectorpb.ExternalAudioStreamRequest{
-		AudioRequestType: &vectorpb.ExternalAudioStreamRequest_AudioStreamPrepare{
-			AudioStreamPrepare: &vectorpb.ExternalAudioStreamPrepare{
-				AudioFrameRate: qwenTTSSampleRateOut,
-				AudioVolume:    100,
-			},
-		},
-	})
-
-	var chunksToDetermineLength []byte
-	for _, chunk := range audioChunks {
-		chunksToDetermineLength = append(chunksToDetermineLength, chunk...)
-	}
-	go func() {
-		for _, chunk := range audioChunks {
-			vclient.Send(&vectorpb.ExternalAudioStreamRequest{
-				AudioRequestType: &vectorpb.ExternalAudioStreamRequest_AudioStreamChunk{
-					AudioStreamChunk: &vectorpb.ExternalAudioStreamChunk{
-						AudioChunkSizeBytes: 1024,
-						AudioChunkSamples:   chunk,
-					},
-				},
-			})
-			time.Sleep(time.Millisecond * 25)
-		}
-		vclient.Send(&vectorpb.ExternalAudioStreamRequest{
-			AudioRequestType: &vectorpb.ExternalAudioStreamRequest_AudioStreamComplete{
-				AudioStreamComplete: &vectorpb.ExternalAudioStreamComplete{},
-			},
-		})
-	}()
-	time.Sleep(pcmLength(chunksToDetermineLength) + (time.Millisecond * 50))
-	return nil
+	// play on the robot, interruptible via ctx (barge-in cuts the audio)
+	return playExternalAudioStream(ctx, robot, audioChunks)
 }
 
 // wavToPCM parses a RIFF/WAVE file and returns the PCM sample data of the

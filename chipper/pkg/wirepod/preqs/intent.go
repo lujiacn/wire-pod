@@ -15,6 +15,9 @@ func (s *Server) ProcessIntent(req *vtt.IntentRequest) (*vtt.IntentResponse, err
 	var successMatched bool
 	speechReq := sr.ReqToSpeechRequest(req)
 	var transcribedText string
+	// barge-in: the user just spoke - interrupt any LLM response the robot
+	// is still saying, so it stops talking and reacts to the new input
+	ttr.CancelActiveResponse(req.Device)
 	// if the request may end up at the LLM (always-LLM or IntentGraph
 	// fallback), capture a silent environment photo in parallel with
 	// transcription, so the LLM can answer based on what the robot sees

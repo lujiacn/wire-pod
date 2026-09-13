@@ -222,6 +222,15 @@ func StreamingKGSim(req interface{}, esn string, transcribedText string, isKG bo
 	kgReadyToAnswer := make(chan bool)
 	kgStopLooping := false
 	ctx := context.Background()
+	// cancellable context for this response: barge-in (wake word, button
+	// press, or a new voice request from the robot) cancels it, which stops
+	// the LLM stream, the queued sentences and the audio playback
+	respCtx, respCancel := context.WithCancel(context.Background())
+	defer respCancel()
+	// if a response is still in flight for this robot, interrupt it now and
+	// wait for it to release behavior control
+	respHandle := RegisterActiveResponse(esn, respCancel)
+	defer UnregisterActiveResponse(esn, respHandle)
 	matched := false
 	var robot *vector.Vector
 	var guid string
@@ -326,8 +335,21 @@ func StreamingKGSim(req interface{}, esn string, transcribedText string, isKG bo
 		Role: openai.ChatMessageRoleAssistant,
 	})
 	fmt.Println("LLM stream response: ")
+	// when the response is interrupted, close the LLM stream so a blocked
+	// stream.Recv() unblocks and no further sentences get queued
+	go func() {
+		<-respCtx.Done()
+		stream.Close()
+	}()
+	// watch for barge-in triggers (wake word / touch) while the response is
+	// being generated and spoken
+	go InterruptKGSimWhenTouchedOrWaked(robot, respCancel, stopStop)
 	go func() {
 		for {
+			if respCtx.Err() != nil {
+				// response was interrupted - stop queueing sentences
+				return
+			}
 			response, err := stream.Recv()
 			if errors.Is(err, io.EOF) {
 				if len(fullRespSlice) == 0 {
@@ -351,6 +373,12 @@ func StreamingKGSim(req interface{}, esn string, transcribedText string, isKG bo
 					logger.Println("LLM debug: response has no sentence punctuation, speaking it as one chunk")
 					fullRespSlice = append(fullRespSlice, strings.TrimSpace(fullfullRespText))
 					fullRespText = ""
+					// the sentence is now queued - signal the main flow,
+					// which is otherwise still waiting for a first sentence
+					select {
+					case successIntent <- true:
+					default:
+					}
 				}
 				isDone = true
 				// if fullRespSlice != fullRespText, add that missing bit to fullRespSlice
@@ -416,24 +444,27 @@ func StreamingKGSim(req interface{}, esn string, transcribedText string, isKG bo
 			}
 		}
 	}()
-	for is := range successIntent {
-		if is {
-			if !isKG {
-				IntentPass(req, "intent_greeting_hello", transcribedText, map[string]string{}, false)
+	successReceived := false
+	for !successReceived {
+		select {
+		case is := <-successIntent:
+			if is {
+				if !isKG {
+					IntentPass(req, "intent_greeting_hello", transcribedText, map[string]string{}, false)
+				}
+				successReceived = true
+			} else {
+				return "", errors.New("llm returned no response")
 			}
-			break
-		} else {
-			return "", errors.New("llm returned no response")
+		case <-respCtx.Done():
+			logger.Println("LLM response interrupted before the first sentence was spoken")
+			return "", nil
 		}
 	}
 	time.Sleep(time.Millisecond * 200)
 	if !isKG {
 		BControl(robot, ctx, start, stop)
 	}
-	interrupted := false
-	go func() {
-		interrupted = InterruptKGSimWhenTouchedOrWaked(robot, stop, stopStop)
-	}()
 	var TTSLoopAnimation string
 	var TTSGetinAnimation string
 	if isKG {
@@ -445,16 +476,18 @@ func StreamingKGSim(req interface{}, esn string, transcribedText string, isKG bo
 	}
 
 	var stopTTSLoop bool
+	var ttsLoopStarted bool
 	TTSLoopStopped := make(chan bool)
 	// wait for behavior control, but don't hang forever if the robot never
 	// grants it (e.g. it is busy executing the greeting intent that was just
 	// sent to it)
 	select {
 	case <-start:
+	case <-respCtx.Done():
 	case <-time.After(8 * time.Second):
 		logger.Println("KGSim: behavior control was not granted after 8 seconds, continuing anyway (robot may stay silent)")
 	}
-	{
+	if respCtx.Err() == nil {
 		if isKG {
 			kgStopLooping = true
 			for range kgReadyToAnswer {
@@ -473,6 +506,7 @@ func StreamingKGSim(req interface{}, esn string, transcribedText string, isKG bo
 			},
 		)
 		if !vars.APIConfig.Knowledge.CommandsEnable {
+			ttsLoopStarted = true
 			go func() {
 				for {
 					if stopTTSLoop {
@@ -493,54 +527,54 @@ func StreamingKGSim(req interface{}, esn string, transcribedText string, isKG bo
 		}
 		var disconnect bool
 		numInResp := 0
+	sentenceLoop:
 		for {
 			respSlice := fullRespSlice
 			if len(respSlice)-1 < numInResp {
 				if !isDone {
 					logger.Println("Waiting for more content from LLM...")
-					for range speakReady {
+					select {
+					case <-speakReady:
 						respSlice = fullRespSlice
-						break
+					case <-respCtx.Done():
+						break sentenceLoop
 					}
 				} else {
 					break
 				}
 			}
-			if interrupted {
-				break
+			// barge-in: drop all remaining sentences once interrupted
+			if respCtx.Err() != nil {
+				break sentenceLoop
 			}
 			logger.Println(respSlice[numInResp])
 			acts := GetActionsFromString(respSlice[numInResp])
 			nChat[len(nChat)-1].Content = fullRespText
-			disconnect = PerformActions(nChat, acts, robot, stopStop)
-			if disconnect {
-				break
+			disconnect = PerformActions(respCtx, nChat, acts, robot)
+			if disconnect || respCtx.Err() != nil {
+				break sentenceLoop
 			}
 			numInResp = numInResp + 1
 		}
-		if !vars.APIConfig.Knowledge.CommandsEnable {
-			stopTTSLoop = true
-			for range TTSLoopStopped {
-				break
-			}
+	}
+	if !vars.APIConfig.Knowledge.CommandsEnable && ttsLoopStarted {
+		stopTTSLoop = true
+		for range TTSLoopStopped {
+			break
 		}
-		time.Sleep(time.Millisecond * 100)
-		// if isKG {
-		// 	robot.Conn.PlayAnimation(
-		// 		ctx,
-		// 		&vectorpb.PlayAnimationRequest{
-		// 			Animation: &vectorpb.Animation{
-		// 				Name: "anim_knowledgegraph_success_01",
-		// 			},
-		// 			Loops: 1,
-		// 		},
-		// 	)
-		// 	time.Sleep(time.Millisecond * 3300)
-		// }
-		if !interrupted {
-			stopStop <- true
-			stop <- true
-		}
+	}
+	time.Sleep(time.Millisecond * 100)
+	// tell the barge-in watcher to exit (it may have already exited because
+	// it triggered the interrupt)
+	select {
+	case stopStop <- true:
+	default:
+	}
+	// always release behavior control - also after an interrupt, so the robot
+	// goes back to normal and a new voice request can take control
+	stop <- true
+	if respCtx.Err() != nil {
+		logger.Println("LLM response was interrupted, remaining sentences dropped")
 	}
 	return "", nil
 }
