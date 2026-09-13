@@ -813,6 +813,19 @@ func DoGetImage(msgs []openai.ChatCompletionMessage, param string, robot *vector
 		for {
 			response, err := stream.Recv()
 			if errors.Is(err, io.EOF) {
+				if len(fullRespSlice) == 0 {
+					if strings.TrimSpace(fullfullRespText) == "" {
+						// LLM returned no content at all
+						logger.Println("LLM returned no response")
+						isDone = true
+						return
+					}
+					// the LLM responded but used no sentence-ending
+					// punctuation - speak the whole response as one chunk
+					// instead of indexing into an empty slice
+					logger.Println("LLM debug: response has no sentence punctuation, speaking it as one chunk")
+					fullRespSlice = append(fullRespSlice, strings.TrimSpace(fullfullRespText))
+				}
 				isDone = true
 				newStr := fullRespSlice[0]
 				for i, str := range fullRespSlice {
@@ -842,6 +855,10 @@ func DoGetImage(msgs []openai.ChatCompletionMessage, param string, robot *vector
 			if err != nil {
 				logger.Println("Stream error: " + err.Error())
 				return
+			}
+			if len(response.Choices) == 0 {
+				logger.Println("Empty response chunk")
+				continue
 			}
 			fullfullRespText = fullfullRespText + removeSpecialCharacters(response.Choices[0].Delta.Content)
 			fullRespText = fullRespText + removeSpecialCharacters(response.Choices[0].Delta.Content)
