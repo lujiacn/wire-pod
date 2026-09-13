@@ -1042,7 +1042,7 @@
                 </select>
               </div>
               <div id="qwenTTSInput" style="display:none">
-                <p class="hint" style="color:var(--muted-2);font-size:.78rem">Create an API key in the Alibaba Cloud Model Studio (Bailian) console. Responses are synthesized with Qwen3-TTS and played through Vector's speaker; the LLM is automatically allowed to answer in Chinese.</p>
+                <p class="hint" style="color:var(--muted-2);font-size:.78rem">Create an API key in the Alibaba Cloud Model Studio (Bailian) console. Responses are synthesized with Qwen3-TTS and played through Vector's speaker; the LLM is automatically allowed to answer in Chinese. For a cloned voice (e.g. TARS): create it under Voice Cloning in the console, then pick the matching model here (qwen3-tts-vc / cosyvoice-v3.5-plus) and paste its voice ID under "Custom / cloned voice ID".</p>
                 <div class="grid c2">
                   <div class="field"><label for="ttsKey">DashScope API key</label><input type="password" id="ttsKey" placeholder="sk-..." /></div>
                   <div class="field">
@@ -1055,13 +1055,15 @@
                   <div class="field">
                     <label for="ttsModel">TTS model</label>
                     <select id="ttsModel">
-                      <option value="qwen3-tts-flash" selected>qwen3-tts-flash</option>
+                      <option value="qwen3-tts-flash" selected>qwen3-tts-flash (preset voices)</option>
                       <option value="qwen3-tts-instruct-flash">qwen3-tts-instruct-flash (instruction control)</option>
+                      <option value="qwen3-tts-vc-2026-01-22">qwen3-tts-vc (cloned voices, e.g. TARS)</option>
+                      <option value="cosyvoice-v3.5-plus">cosyvoice-v3.5-plus (cloned voices)</option>
                     </select>
                   </div>
                   <div class="field">
                     <label for="ttsVoice">Voice</label>
-                    <select id="ttsVoice">
+                    <select id="ttsVoice" onchange="checkTTS()">
                       <option value="Momo" selected>Momo (playful, cute — closest to Vector)</option>
                       <option value="Vivian">Vivian (confident, cute, feisty)</option>
                       <option value="Cherry">Cherry (sunny, friendly young woman)</option>
@@ -1069,8 +1071,13 @@
                       <option value="Chelsie">Chelsie (virtual girlfriend)</option>
                       <option value="Ethan">Ethan (sunny, warm man)</option>
                       <option value="Moon">Moon (bold, handsome man)</option>
+                      <option value="custom">Custom / cloned voice ID (TARS...)</option>
                     </select>
                   </div>
+                </div>
+                <div class="field" id="ttsVoiceCustomInput" style="display:none">
+                  <label for="ttsVoiceCustom">Cloned voice ID <span class="hint">(from the Bailian voice cloning console, must match the selected model family)</span></label>
+                  <input type="text" id="ttsVoiceCustom" placeholder="qwen-tts-vc-tars-voice-..." />
                 </div>
                 <div class="field"><label for="ttsInstructions">Voice instructions <span class="hint">(instruct model only, blank = cute-robot preset)</span></label><input type="text" id="ttsInstructions" placeholder="像一只可爱的小机器人，语速稍快，音调偏高" /></div>
                 <div class="field">
@@ -2221,8 +2228,10 @@
     }
 
     /* ------------------------------ tts (speech synthesis) ------------------------------ */
+    const TTS_VOICE_PRESETS = ['Momo', 'Vivian', 'Cherry', 'Serena', 'Chelsie', 'Ethan', 'Moon'];
     function checkTTS() {
       $('qwenTTSInput').style.display = $('ttsService').value ? 'block' : 'none';
+      $('ttsVoiceCustomInput').style.display = $('ttsVoice').value === 'custom' ? 'block' : 'none';
     }
     async function updateTTSAPI() {
       const data = await apiJSON('/api/get_tts_api');
@@ -2232,7 +2241,15 @@
       $('ttsKey').value = data.key || '';
       $('ttsRegion').value = data.region || 'cn';
       $('ttsModel').value = data.model || 'qwen3-tts-flash';
-      $('ttsVoice').value = data.voice || 'Momo';
+      const storedVoice = data.voice || 'Momo';
+      if (TTS_VOICE_PRESETS.includes(storedVoice)) {
+        $('ttsVoice').value = storedVoice;
+        $('ttsVoiceCustom').value = '';
+      } else {
+        /* a cloned voice ID (or any non-preset name) */
+        $('ttsVoice').value = 'custom';
+        $('ttsVoiceCustom').value = storedVoice;
+      }
       $('ttsInstructions').value = data.instructions || '';
       $('ttsMode').value = data.mode || 'auto';
       checkTTS();
@@ -2240,6 +2257,13 @@
     }
     async function sendTTSAPIKey() {
       setStatus('addTTSAPIStatus', 'Saving...', 'warn');
+      const voice = $('ttsVoice').value === 'custom'
+        ? $('ttsVoiceCustom').value.trim()
+        : $('ttsVoice').value;
+      if (!voice) {
+        setStatus('addTTSAPIStatus', 'Please enter the cloned voice ID.', 'err');
+        return;
+      }
       const resp = await apiText('/api/set_tts_api', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -2247,7 +2271,7 @@
           key: $('ttsKey').value,
           region: $('ttsRegion').value,
           model: $('ttsModel').value,
-          voice: $('ttsVoice').value,
+          voice: voice,
           instructions: $('ttsInstructions').value,
           mode: $('ttsMode').value
         })

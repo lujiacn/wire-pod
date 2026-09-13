@@ -3,6 +3,7 @@ package wirepod_ttr
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/binary"
 	"encoding/json"
 	"errors"
@@ -54,9 +55,25 @@ type qwenTTSResp struct {
 	Message    string `json:"message"`
 	Output     struct {
 		Audio struct {
-			URL string `json:"url"`
+			URL  string `json:"url"`
+			Data string `json:"data"`
 		} `json:"audio"`
 	} `json:"output"`
+}
+
+// CosyVoice uses a different endpoint and request shape than the Qwen-TTS
+// family (no language_type/instructions; wav format + sample rate are set
+// explicitly).
+type cosyVoiceInput struct {
+	Text       string `json:"text"`
+	Voice      string `json:"voice"`
+	Format     string `json:"format"`
+	SampleRate int    `json:"sample_rate"`
+}
+
+type cosyVoiceReq struct {
+	Model string         `json:"model"`
+	Input cosyVoiceInput `json:"input"`
 }
 
 // QwenTTSActive returns true if a DashScope API key is configured for Qwen TTS.
@@ -104,6 +121,55 @@ func qwenBaseURL(region string) string {
 	return "https://dashscope.aliyuncs.com/api/v1"
 }
 
+// dashScopeRequest posts a synthesis request and returns the WAV audio bytes.
+// The Qwen-TTS family returns an URL to a WAV file; CosyVoice returns the WAV
+// inline as base64 - both shapes are handled here.
+func dashScopeRequest(url, key string, body []byte) ([]byte, error) {
+	req, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(body))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Authorization", "Bearer "+strings.TrimSpace(key))
+	req.Header.Set("Content-Type", "application/json")
+
+	client := &http.Client{Timeout: time.Second * 60}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	respBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("dashscope returned %d: %s", resp.StatusCode, string(respBytes))
+	}
+	var qresp qwenTTSResp
+	if err := json.Unmarshal(respBytes, &qresp); err != nil {
+		return nil, err
+	}
+	if qresp.Output.Audio.URL == "" && qresp.Output.Audio.Data == "" {
+		return nil, fmt.Errorf("dashscope returned no audio (code: %s, message: %s)", qresp.Code, qresp.Message)
+	}
+	if qresp.Output.Audio.URL != "" {
+		audioReq, err := http.NewRequest(http.MethodGet, qresp.Output.Audio.URL, nil)
+		if err != nil {
+			return nil, err
+		}
+		audioResp, err := client.Do(audioReq)
+		if err != nil {
+			return nil, err
+		}
+		defer audioResp.Body.Close()
+		return io.ReadAll(audioResp.Body)
+	}
+	if decoded, err := base64.StdEncoding.DecodeString(qresp.Output.Audio.Data); err == nil {
+		return decoded, nil
+	}
+	return base64.RawStdEncoding.DecodeString(qresp.Output.Audio.Data)
+}
+
 // DoSayText_Qwen synthesizes text with Qwen3-TTS and plays it on the robot.
 func DoSayText_Qwen(robot *vector.Vector, input string) error {
 	input = strings.TrimSpace(input)
@@ -131,64 +197,52 @@ func DoSayText_Qwen(robot *vector.Vector, input string) error {
 		instructions = qwenTTSDefaultInstructions
 	}
 
-	reqBody := qwenTTSReq{
-		Model: model,
-		Input: qwenTTSInput{
+	reqBodyLog := "(Qwen TTS) requesting speech, model: " + model + ", voice: " + voice
+	var audioBytes []byte
+	var err error
+	if strings.HasPrefix(model, "cosyvoice") {
+		// CosyVoice family: SpeechSynthesizer endpoint, different request shape
+		reqBodyLog += " (CosyVoice endpoint)"
+		bodyBytes, marshalErr := json.Marshal(cosyVoiceReq{
+			Model: model,
+			Input: cosyVoiceInput{
+				Text:       input,
+				Voice:      voice,
+				Format:     "wav",
+				SampleRate: 24000,
+			},
+		})
+		if marshalErr != nil {
+			return marshalErr
+		}
+		audioBytes, err = dashScopeRequest(
+			qwenBaseURL(tts.Region)+"/services/audio/tts/SpeechSynthesizer",
+			tts.Key, bodyBytes)
+	} else {
+		qwenInput := qwenTTSInput{
 			Text:         input,
 			Voice:        voice,
-			LanguageType: languageType,
 			Instructions: instructions,
-		},
+		}
+		// cloned-voice (VC) models do not take a language hint
+		if !strings.Contains(model, "-vc") {
+			qwenInput.LanguageType = languageType
+		}
+		bodyBytes, marshalErr := json.Marshal(qwenTTSReq{
+			Model: model,
+			Input: qwenInput,
+		})
+		if marshalErr != nil {
+			return marshalErr
+		}
+		audioBytes, err = dashScopeRequest(
+			qwenBaseURL(tts.Region)+"/services/aigc/multimodal-generation/generation",
+			tts.Key, bodyBytes)
 	}
-	bodyBytes, err := json.Marshal(reqBody)
 	if err != nil {
 		return err
 	}
-
-	url := qwenBaseURL(tts.Region) + "/services/aigc/multimodal-generation/generation"
-	req, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(bodyBytes))
-	if err != nil {
-		return err
-	}
-	req.Header.Set("Authorization", "Bearer "+strings.TrimSpace(tts.Key))
-	req.Header.Set("Content-Type", "application/json")
-
-	client := &http.Client{Timeout: time.Second * 60}
-	logger.Println("(Qwen TTS) requesting speech, model: " + model + ", voice: " + voice + ", language: " + languageType)
-	resp, err := client.Do(req)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-	respBytes, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return err
-	}
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("dashscope returned %d: %s", resp.StatusCode, string(respBytes))
-	}
-	var qresp qwenTTSResp
-	if err := json.Unmarshal(respBytes, &qresp); err != nil {
-		return err
-	}
-	if qresp.Output.Audio.URL == "" {
-		return fmt.Errorf("dashscope returned no audio url (code: %s, message: %s)", qresp.Code, qresp.Message)
-	}
-
-	// the audio is returned as a URL to a WAV file
-	audioReq, err := http.NewRequest(http.MethodGet, qresp.Output.Audio.URL, nil)
-	if err != nil {
-		return err
-	}
-	audioResp, err := client.Do(audioReq)
-	if err != nil {
-		return err
-	}
-	defer audioResp.Body.Close()
-	audioBytes, err := io.ReadAll(audioResp.Body)
-	if err != nil {
-		return err
-	}
+	logger.Println(reqBodyLog)
 
 	pcm, sampleRate, err := wavToPCM(audioBytes)
 	if err != nil {
