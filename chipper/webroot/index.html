@@ -2375,7 +2375,7 @@
       $('reviewConn').textContent = conn === 'ep' ? 'Escape Pod (ep)' : 'IP address (ip)';
       $('reviewPort').textContent = conn === 'ip' ? ($('portInput').value || '443') : '-';
       $('reviewProvider').textContent = state.stt.provider || 'unknown';
-      $('reviewLanguage').textContent = (state.stt.provider === 'vosk' || state.stt.provider === 'whisper.cpp') ? $('languageSelection').value : 'not set';
+      $('reviewLanguage').textContent = (state.stt.provider === 'vosk' || state.stt.provider === 'whisper.cpp' || state.stt.provider === 'whisper' || state.stt.provider === 'dashscope') ? $('languageSelection').value : 'not set';
     }
     async function submitInitialSetup() {
       /* same flow as the original initial.js sendSetupInfo() + setConn() */
