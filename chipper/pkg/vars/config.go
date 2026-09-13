@@ -47,6 +47,10 @@ type apiConfig struct {
 		WhisperEndpoint string `json:"whisper_endpoint"`
 		WhisperKey      string `json:"whisper_key"`
 		WhisperModel    string `json:"whisper_model"`
+		// Aliyun DashScope ASR (Qwen3-ASR-Flash), a cloud STT option
+		DashScopeEndpoint string `json:"dashscope_endpoint"`
+		DashScopeKey      string `json:"dashscope_key"`
+		DashScopeModel    string `json:"dashscope_model"`
 	} `json:"STT"`
 	// speech synthesis (text-to-speech) settings; the robot's built-in voice
 	// engine can only speak English, so an API service is needed for Chinese

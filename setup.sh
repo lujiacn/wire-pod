@@ -144,6 +144,7 @@ function getSTT() {
         echo "2: Picovoice Leopard (local, usage collected, accurate, account signup required)"
         echo "3: VOSK (local, accurate, multilanguage, fast, recommended)"
         echo "4: Whisper (local, accurate, multilanguage, recommended ONLY for more powerful hardware, please don't run on a Pi)"
+        echo "5: Aliyun DashScope ASR / Qwen3-ASR (cloud, Alibaba account and API key required, very accurate for Chinese, needs internet)"
         echo
         read -p "Enter a number (3): " sttServiceNum
         if [[ ! -n ${sttServiceNum} ]]; then
@@ -161,6 +162,8 @@ function getSTT() {
             sttService="vosk"
             elif [[ ${sttServiceNum} == "4" ]]; then
             sttService="whisper"
+            elif [[ ${sttServiceNum} == "5" ]]; then
+            sttService="dashscope"
         else
             echo
             echo "Choose a valid number, or just press enter to use the default number."
@@ -263,6 +266,9 @@ function getSTT() {
 	cmake --build build_go --config Release
         cd ${origDir}
         echo "export WHISPER_MODEL=$whispermodel" >> ./chipper/source.sh
+    elif [[ ${sttService} == "dashscope" ]]; then
+        echo "export STT_SERVICE=dashscope" >> ./chipper/source.sh
+        echo "DashScope ASR selected - everything is configured at runtime in the web UI (STT panel: API key, model, language)."
     else
         echo "export STT_SERVICE=coqui" >> ./chipper/source.sh
         if [[ ! -f ./stt/completed ]]; then
@@ -590,6 +596,9 @@ function setupSystemd() {
         export CGO_LDFLAGS="-L$(pwd)/../whisper.cpp"
         export CGO_CFLAGS="-I$(pwd)/../whisper.cpp"
         /usr/local/go/bin/go build -tags $GOTAGS -ldflags="${GOLDFLAGS}" cmd/experimental/whisper.cpp/main.go
+    elif [[ ${STT_SERVICE} == "dashscope" ]]; then
+        echo "wire-pod.service created, building chipper with DashScope (Aliyun) STT service..."
+        /usr/local/go/bin/go build -tags $GOTAGS -ldflags="${GOLDFLAGS}" cmd/dashscope/main.go
     else
         echo "wire-pod.service created, building chipper with Coqui STT service..."
         export CGO_LDFLAGS="-L/root/.coqui/"

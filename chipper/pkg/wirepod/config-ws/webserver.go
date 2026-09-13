@@ -261,10 +261,13 @@ func handleGetTTSAPI(w http.ResponseWriter) {
 
 func handleSetSTTInfo(w http.ResponseWriter, r *http.Request) {
 	var request struct {
-		Language        string  `json:"language"`
-		WhisperEndpoint *string `json:"whisper_endpoint"`
-		WhisperKey      *string `json:"whisper_key"`
-		WhisperModel    *string `json:"whisper_model"`
+		Language          string  `json:"language"`
+		WhisperEndpoint   *string `json:"whisper_endpoint"`
+		WhisperKey        *string `json:"whisper_key"`
+		WhisperModel      *string `json:"whisper_model"`
+		DashScopeEndpoint *string `json:"dashscope_endpoint"`
+		DashScopeKey      *string `json:"dashscope_key"`
+		DashScopeModel    *string `json:"dashscope_model"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
 		http.Error(w, "invalid request body", http.StatusBadRequest)
@@ -291,6 +294,12 @@ func handleSetSTTInfo(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "language not valid", http.StatusBadRequest)
 			return
 		}
+	} else if vars.APIConfig.STT.Service == "dashscope" {
+		// Aliyun DashScope ASR: no model download needed
+		if !isValidLanguage(request.Language, localization.ValidVoskModels) {
+			http.Error(w, "language not valid", http.StatusBadRequest)
+			return
+		}
 	} else {
 		http.Error(w, "service must be vosk or whisper", http.StatusBadRequest)
 		return
@@ -306,6 +315,16 @@ func handleSetSTTInfo(w http.ResponseWriter, r *http.Request) {
 	}
 	if request.WhisperModel != nil {
 		vars.APIConfig.STT.WhisperModel = strings.TrimSpace(*request.WhisperModel)
+	}
+	// optional Aliyun DashScope ASR settings (same pointer pattern)
+	if request.DashScopeEndpoint != nil {
+		vars.APIConfig.STT.DashScopeEndpoint = strings.TrimSpace(*request.DashScopeEndpoint)
+	}
+	if request.DashScopeKey != nil {
+		vars.APIConfig.STT.DashScopeKey = strings.TrimSpace(*request.DashScopeKey)
+	}
+	if request.DashScopeModel != nil {
+		vars.APIConfig.STT.DashScopeModel = strings.TrimSpace(*request.DashScopeModel)
 	}
 	vars.APIConfig.PastInitialSetup = true
 	vars.WriteConfigToDisk()

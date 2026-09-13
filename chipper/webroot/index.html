@@ -1148,6 +1148,12 @@
                 <div class="field"><label for="whisperModel">Whisper API model <span class="hint">(blank = whisper-1)</span></label><input type="text" id="whisperModel" placeholder="whisper-large-v3" /></div>
                 <p class="hint" style="color:var(--muted-2);font-size:.78rem">Any OpenAI-compatible transcription API works (OpenAI, Groq, a proxy...). The robot connection stays direct; set the http(s)_proxy environment variables if the API is only reachable through a proxy.</p>
               </div>
+              <div id="dashscopeConfigDiv" style="display:none;max-width:560px">
+                <div class="field"><label for="dashscopeEndpoint">DashScope ASR endpoint <span class="hint">(blank = mainland China dashscope.aliyuncs.com)</span></label><input type="text" id="dashscopeEndpoint" placeholder="https://dashscope-intl.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation" /></div>
+                <div class="field"><label for="dashscopeKey">DashScope API key</label><input type="password" id="dashscopeKey" placeholder="sk-..." /></div>
+                <div class="field"><label for="dashscopeModel">DashScope ASR model <span class="hint">(blank = qwen3-asr-flash)</span></label><input type="text" id="dashscopeModel" placeholder="qwen3-asr-flash" /></div>
+                <p class="hint" style="color:var(--muted-2);font-size:.78rem">Same Alibaba Cloud/Bailian API key as the Qwen TTS feature (create one at bailian.console.aliyun.com). Speech is transcribed with Qwen3-ASR-Flash; usage is billed per second of audio (~¥0.8 per hour, new accounts get 10 hours free).</p>
+              </div>
               <div class="bar" style="max-width:360px;margin-bottom:12px"><i id="sttBar"></i></div>
               <button class="btn primary" onclick="setSTTLanguage()">
                 <svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.7 2.5 15.3 0 18M12 3c-2.5 2.7-2.5 15.3 0 18"/></svg>
@@ -2276,10 +2282,11 @@
       state.stt.language = parsed.language || 'en-US';
       $('sttProviderBadge').textContent = (state.stt.provider || 'unknown') + ' · ' + state.stt.language;
       $('initialProviderReadout').textContent = state.stt.provider || 'unknown';
-      if (state.stt.provider !== 'vosk' && state.stt.provider !== 'whisper.cpp' && state.stt.provider !== 'whisper') {
+      if (state.stt.provider !== 'vosk' && state.stt.provider !== 'whisper.cpp' && state.stt.provider !== 'whisper' && state.stt.provider !== 'dashscope') {
         setStatus('languageStatus', "To set the STT language, the provider must be Vosk or Whisper. The current one is '" + (parsed.sttProvider || state.stt.provider) + "'.", 'err');
         $('languageSelectionDiv').style.display = 'none';
         $('whisperConfigDiv').style.display = 'none';
+        $('dashscopeConfigDiv').style.display = 'none';
       } else {
         setStatus('languageStatus', '');
         $('languageSelectionDiv').style.display = 'flex';
@@ -2291,6 +2298,13 @@
           $('whisperKey').value = parsed.whisper_key || '';
           $('whisperModel').value = parsed.whisper_model || '';
         }
+        const isDashScope = state.stt.provider === 'dashscope';
+        $('dashscopeConfigDiv').style.display = isDashScope ? 'block' : 'none';
+        if (isDashScope) {
+          $('dashscopeEndpoint').value = parsed.dashscope_endpoint || '';
+          $('dashscopeKey').value = parsed.dashscope_key || '';
+          $('dashscopeModel').value = parsed.dashscope_model || '';
+        }
       }
       renderInitialState();
     }
@@ -2301,6 +2315,11 @@
         payload.whisper_endpoint = $('whisperEndpoint').value;
         payload.whisper_key = $('whisperKey').value;
         payload.whisper_model = $('whisperModel').value;
+      }
+      if (state.stt.provider === 'dashscope') {
+        payload.dashscope_endpoint = $('dashscopeEndpoint').value;
+        payload.dashscope_key = $('dashscopeKey').value;
+        payload.dashscope_model = $('dashscopeModel').value;
       }
       const resp = await apiText('/api/set_stt_info', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
