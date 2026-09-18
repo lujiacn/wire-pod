@@ -120,7 +120,7 @@ func BControl(robot *vector.Vector, ctx context.Context, start, stop chan bool) 
 		for {
 			select {
 			case <-stop:
-				logger.Println("KGSim: releasing behavior control (interrupt)")
+				logger.Println("KGSim: releasing behavior control")
 				if err := r.Send(
 					&vectorpb.BehaviorControlRequest{
 						RequestType: &vectorpb.BehaviorControlRequest_ControlRelease{

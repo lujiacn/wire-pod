@@ -664,7 +664,7 @@ func KGSim(esn string, textToSay string) error {
 			for {
 				select {
 				case <-stop:
-					logger.Println("KGSim: releasing behavior control (interrupt)")
+					logger.Println("KGSim: releasing behavior control")
 					if err := r.Send(
 						&vectorpb.BehaviorControlRequest{
 							RequestType: &vectorpb.BehaviorControlRequest_ControlRelease{

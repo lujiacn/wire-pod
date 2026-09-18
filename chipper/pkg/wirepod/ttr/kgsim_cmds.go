@@ -805,8 +805,23 @@ func getOpenAIVoice(voice string) openai.SpeechVoice {
 // ctx (barge-in): the chunk sender aborts and the stream is closed, which
 // stops the audio on the robot immediately. Blocks until the audio has fully
 // played or ctx is cancelled, so callers can pace sentence-by-sentence.
+// playExternalAudioStream plays 16 kHz PCM chunks on the robot's speaker
+// through an external audio stream. It blocks until the robot confirms that
+// playback has finished (AudioStreamPlaybackComplete), so the next sentence
+// doesn't talk over this one and behavior control is not released while the
+// speaker is still playing.
+//
+// Do not go back to pacing this with a byte-count estimate: the robot's
+// actual playback lags behind the estimate (stream startup, jitter buffer,
+// animations ducking the audio channel). The lag accumulates over a
+// response, and for the last sentence the wait would expire early - the
+// following behavior-control release then makes the robot drop the audio
+// still in its buffer, so the user never hears the final sentence.
+//
+// The stream is tied to ctx, so a barge-in (ctx cancelled) tears the stream
+// down and the robot stops the audio immediately.
 func playExternalAudioStream(ctx context.Context, robot *vector.Vector, audioChunks [][]byte) error {
-	vclient, err := robot.Conn.ExternalAudioStreamPlayback(context.Background())
+	vclient, err := robot.Conn.ExternalAudioStreamPlayback(ctx)
 	if err != nil {
 		return err
 	}
@@ -818,22 +833,43 @@ func playExternalAudioStream(ctx context.Context, robot *vector.Vector, audioChu
 			},
 		},
 	})
-	// closing the stream stops the audio on the robot right away
-	cutPlayback := func() {
-		vclient.CloseSend()
-	}
+	// the robot reports how playback actually progresses on this stream
+	played := make(chan error, 1)
+	go func() {
+		for {
+			resp, err := vclient.Recv()
+			if err != nil {
+				// io.EOF (robot closed without confirming) and ctx
+				// cancellation (barge-in) are not playback errors
+				if err == io.EOF || ctx.Err() != nil {
+					played <- nil
+				} else {
+					played <- err
+				}
+				return
+			}
+			switch resp.GetAudioResponseType().(type) {
+			case *vectorpb.ExternalAudioStreamResponse_AudioStreamPlaybackComplete:
+				played <- nil
+				return
+			case *vectorpb.ExternalAudioStreamResponse_AudioStreamBufferOverrun:
+				logger.Println("(audio) robot reported an audio buffer overrun (chunks arrived faster than it could play)")
+			case *vectorpb.ExternalAudioStreamResponse_AudioStreamPlaybackFailyer:
+				logger.Println("(audio) robot reported an audio playback failure")
+			}
+		}
+	}()
 	go func() {
 		for _, chunk := range audioChunks {
 			select {
 			case <-ctx.Done():
-				cutPlayback()
 				return
 			default:
 			}
 			vclient.Send(&vectorpb.ExternalAudioStreamRequest{
 				AudioRequestType: &vectorpb.ExternalAudioStreamRequest_AudioStreamChunk{
 					AudioStreamChunk: &vectorpb.ExternalAudioStreamChunk{
-						AudioChunkSizeBytes: 1024,
+						AudioChunkSizeBytes: uint32(len(chunk)),
 						AudioChunkSamples:   chunk,
 					},
 				},
@@ -841,7 +877,6 @@ func playExternalAudioStream(ctx context.Context, robot *vector.Vector, audioChu
 			select {
 			case <-time.After(time.Millisecond * 25):
 			case <-ctx.Done():
-				cutPlayback()
 				return
 			}
 		}
@@ -851,20 +886,23 @@ func playExternalAudioStream(ctx context.Context, robot *vector.Vector, audioChu
 			},
 		})
 	}()
-	// wait for playback to finish (so the next sentence doesn't talk over
-	// this one), unless the response gets interrupted
+	// fallback in case the firmware never confirms playback: the estimated
+	// playback duration (16 kHz, 16-bit mono = 32000 bytes/s) plus slack
 	var totalBytes int
 	for _, chunk := range audioChunks {
 		totalBytes += len(chunk)
 	}
-	// 16 kHz, 16-bit mono: 32000 bytes per second
-	playDuration := time.Duration(totalBytes)*time.Millisecond/32 + (time.Millisecond * 50)
+	timeout := time.Duration(totalBytes)*time.Millisecond/32 + 3*time.Second
 	select {
-	case <-time.After(playDuration):
+	case err := <-played:
+		return err
 	case <-ctx.Done():
-		cutPlayback()
+		// barge-in: the ctx-bound stream is torn down, cutting the audio
+		return nil
+	case <-time.After(timeout):
+		logger.Println("(audio) no playback confirmation from the robot within " + timeout.String() + ", assuming it finished")
+		return nil
 	}
-	return nil
 }
 
 // synthesizeOpenAI synthesizes text with the OpenAI TTS API and returns the
