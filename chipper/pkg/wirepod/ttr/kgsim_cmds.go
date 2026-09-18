@@ -8,10 +8,12 @@ import (
 	"io"
 	"math"
 	"os"
+	"sort"
 	"strconv"
 	"strings"
 	"sync/atomic"
 	"time"
+	"unicode"
 
 	"github.com/fforchino/vector-go-sdk/pkg/vector"
 	"github.com/fforchino/vector-go-sdk/pkg/vectorpb"
@@ -149,7 +151,7 @@ var ValidLLMCommands []LLMCommand = []LLMCommand{
 	},
 	{
 		Command:         "setEyeColor",
-		Description:     "Changes the color of the robot's eyes. The parameter is either a color name or a hue number (0-359). Use this whenever the user asks to change the eye color.",
+		Description:     "Changes the color of the robot's eyes. Use this whenever the user asks to change the eye color, in any language. The parameter is required: an English color name from the parameter choices, or a hue number (0-359). Example: {{setEyeColor||blue}}.",
 		ParamChoices:    "red, orange, yellow, green, cyan, blue, purple, pink, white, or a hue number 0-359",
 		Action:          ActionSetEyeColor,
 		SupportedModels: []string{"all"},
@@ -211,7 +213,10 @@ func CreatePrompt(origPrompt string, model string, isKG bool) string {
 	prompt = prompt + "\n\n" + QwenTTSLanguageInstruction()
 	prompt = prompt + "\n\n" + "Today's date is " + time.Now().Format("Monday, January 2, 2006") + "."
 	if vars.APIConfig.Knowledge.CommandsEnable {
-		prompt = prompt + "\n\n" + "You are running ON an Anki Vector robot. You have a set of commands. If you include an emoji, I will make you start over. If you want to use a command but it doesn't exist or your desired parameter isn't in the list, avoid using the command. The format is {{command||parameter}}. You can embed these in sentences. Example: \"User: How are you feeling? | Response: \"{{playAnimationWI||sad}} I'm feeling sad...\". Square brackets ([]) are not valid.\n\nUse the playAnimation or playAnimationWI commands if you want to express emotion! You are very animated and good at following instructions. Animation takes precendence over words. You are to include many animations in your response.\n\nHere is every valid command:"
+		prompt = prompt + "\n\n" + "You are running ON an Anki Vector robot. You have a set of commands to control the robot's body. A command uses the exact syntax {{CommandName||parameter}} and can be embedded anywhere inside your sentences. You may use several commands in one reply. Square brackets ([]) are not valid. If you include an emoji, I will make you start over."
+		prompt = prompt + "\n\n" + "Command rules, follow them exactly: 1. CommandName must be copied character for character from the command list below. Never invent, translate, or rephrase a command name. 2. Every command must include || followed by one parameter. Never write a command without a parameter. 3. The parameter must be one of the command's listed parameter choices, always written in English, no matter which language the user speaks. If the user names a value in another language, translate it into the English parameter choice first. 4. Your spoken reply stays in the user's language; only commands and parameters are always in English. 5. If the command you want doesn't exist or your desired parameter isn't in the list, don't use any command."
+		prompt = prompt + "\n\n" + "Examples. User: How are you feeling? | Response: {{playAnimationWI||sad}} I'm feeling sad... User: Change your eye color to blue. | Response: Sure! {{setEyeColor||blue}} My eyes are blue now. User: 把眼睛颜色改成绿色 | Response: 好的！{{setEyeColor||green}} 我的眼睛变成绿色了。"
+		prompt = prompt + "\n\n" + "Use the playAnimation or playAnimationWI commands if you want to express emotion! You are very animated and good at following instructions. Animation takes precendence over words. You are to include many animations in your response.\n\nHere is every valid command:"
 		for _, cmd := range ValidLLMCommands {
 			if ModelIsSupported(cmd, model) {
 				promptAppendage := "\n\nCommand Name: " + cmd.Command + "\nDescription: " + cmd.Description + "\nParameter choices: " + cmd.ParamChoices
@@ -257,9 +262,19 @@ func GetActionsFromString(input string) []RobotAction {
 			continue
 		}
 
-		cmdPlusParam := strings.Split(strings.TrimSpace(strings.Split(spl, "}}")[0]), "||")
+		inner := strings.TrimSpace(strings.Split(spl, "}}")[0])
+		// strict format is {{command||parameter}}; tolerate a single | and a
+		// missing parameter so a sloppy LLM reply can't crash chipper
+		sep := "||"
+		if !strings.Contains(inner, sep) && strings.Contains(inner, "|") {
+			sep = "|"
+		}
+		cmdPlusParam := strings.Split(inner, sep)
 		cmd := strings.TrimSpace(cmdPlusParam[0])
-		param := strings.TrimSpace(cmdPlusParam[1])
+		param := ""
+		if len(cmdPlusParam) > 1 {
+			param = strings.TrimSpace(cmdPlusParam[1])
+		}
 		action := CmdParamToAction(cmd, param)
 		if action.Action != -1 {
 			actions = append(actions, action)
@@ -275,12 +290,72 @@ func GetActionsFromString(input string) []RobotAction {
 	return actions
 }
 
+// commandAliases maps a normalized, natural-language command name (what an
+// LLM tends to write instead of the exact name, e.g. "change eye color") to
+// the exact command name from ValidLLMCommands.
+var commandAliases = map[string]string{
+	"changeeyecolor":    "setEyeColor",
+	"changeeyecolour":   "setEyeColor",
+	"changeeyescolor":   "setEyeColor",
+	"changeeyescolour":  "setEyeColor",
+	"eyecolor":          "setEyeColor",
+	"eyecolour":         "setEyeColor",
+	"eyescolor":         "setEyeColor",
+	"seteyecolour":      "setEyeColor",
+	"改变眼睛颜色":          "setEyeColor",
+	"更改眼睛颜色":          "setEyeColor",
+	"设置眼睛颜色":          "setEyeColor",
+	"眼睛颜色":            "setEyeColor",
+	"changevolume":      "setVolume",
+	"setvolumelevel":    "setVolume",
+	"changevolumelevel": "setVolume",
+	"volumelevel":       "setVolume",
+	"takephoto":         "getImage",
+	"takeapicture":      "getImage",
+	"takepicture":       "getImage",
+	"newrequest":        "newVoiceRequest",
+}
+
+// normalizeCommandName lowercases and strips everything except letters and
+// digits so that e.g. "Set Eye Color", "set_eye_color" and "setEyeColor"
+// all compare equal.
+func normalizeCommandName(cmd string) string {
+	var b strings.Builder
+	for _, r := range strings.ToLower(cmd) {
+		if unicode.IsLetter(r) || unicode.IsDigit(r) {
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
+}
+
 func CmdParamToAction(cmd, param string) RobotAction {
 	for _, command := range ValidLLMCommands {
 		if cmd == command.Command {
 			return RobotAction{
 				Action:    command.Action,
 				Parameter: param,
+			}
+		}
+	}
+	normalized := normalizeCommandName(cmd)
+	for _, command := range ValidLLMCommands {
+		if normalized == normalizeCommandName(command.Command) {
+			logger.Println("LLM command '" + cmd + "' normalized to '" + command.Command + "'")
+			return RobotAction{
+				Action:    command.Action,
+				Parameter: param,
+			}
+		}
+	}
+	if canonical, ok := commandAliases[normalized]; ok {
+		for _, command := range ValidLLMCommands {
+			if canonical == command.Command {
+				logger.Println("LLM command '" + cmd + "' matched alias for '" + command.Command + "'")
+				return RobotAction{
+					Action:    command.Action,
+					Parameter: param,
+				}
 			}
 		}
 	}
@@ -351,35 +426,138 @@ func NextActionTag() int32 {
 	return atomic.AddInt32(&actionTagCounter, 1)
 }
 
+// eyeColorHues maps color names to HSV hues (degrees) for SetEyeColor.
+// Includes common synonyms and Chinese names in case the LLM echoes the
+// user's own wording instead of the English parameter choice.
 var eyeColorHues = map[string]float32{
-	"red":     0,
-	"orange":  30,
-	"yellow":  60,
-	"green":   120,
-	"cyan":    180,
-	"blue":    240,
-	"purple":  285,
-	"pink":    320,
-	"magenta": 320,
+	"red":       0,
+	"scarlet":   0,
+	"crimson":   350,
+	"orange":    30,
+	"gold":      55,
+	"yellow":    60,
+	"lime":      90,
+	"green":     120,
+	"cyan":      180,
+	"aqua":      180,
+	"turquoise": 180,
+	"teal":      180,
+	"blue":      240,
+	"purple":    285,
+	"violet":    285,
+	"lavender":  285,
+	"magenta":   320,
+	"pink":      330,
+	"红色":        0,
+	"红":         0,
+	"橙色":        30,
+	"橙":         30,
+	"橘色":        30,
+	"橘":         30,
+	"金色":        55,
+	"黄色":        60,
+	"黄":         60,
+	"绿色":        120,
+	"绿":         120,
+	"青色":        180,
+	"青":         180,
+	"蓝色":        240,
+	"蓝":         240,
+	"紫色":        285,
+	"紫":         285,
+	"品红":        320,
+	"粉色":        330,
+	"粉红":        330,
+	"粉":         330,
 }
 
-func DoSetEyeColor(param string, robot *vector.Vector) error {
-	param = strings.ToLower(strings.TrimSpace(param))
-	var hue float32
-	var saturation float32 = 1.0
-	if param == "white" {
-		saturation = 0.0
-	} else if h, ok := eyeColorHues[param]; ok {
-		hue = h
-	} else {
-		parsed, err := strconv.ParseFloat(param, 32)
-		if err != nil {
-			logger.Println("(eye color) could not parse eye color parameter: " + param)
-			return nil
+// no hue can render white - saturation 0 does
+var eyeColorWhiteNames = []string{"white", "白色", "白"}
+
+func isASCIIString(s string) bool {
+	for i := 0; i < len(s); i++ {
+		if s[i] > 127 {
+			return false
 		}
-		hue = float32(math.Mod(math.Abs(parsed), 360))
 	}
-	logger.Println("(eye color) setting eye color, hue: " + fmt.Sprint(hue))
+	return true
+}
+
+// parseEyeColor extracts a color from free text - an exact color name, a
+// multi-word form like "light blue", a Chinese color name, or a hue number
+// 0-359. Works both on an LLM command parameter and on the user's raw
+// transcribed speech (used as a fallback when the LLM drops the parameter).
+func parseEyeColor(text string) (hue float32, saturation float32, ok bool) {
+	t := strings.ToLower(strings.TrimSpace(text))
+	t = strings.NewReplacer("-", " ", "_", " ").Replace(t)
+	t = strings.Trim(t, " \t.,!?;:\"'()[]{}")
+	if t == "" {
+		return 0, 0, false
+	}
+	for _, name := range eyeColorWhiteNames {
+		if t == name {
+			return 0, 0, true
+		}
+	}
+	if h, hit := eyeColorHues[t]; hit {
+		return h, 1, true
+	}
+	// whole parameter is a hue number (0-359)
+	if parsed, err := strconv.ParseFloat(t, 32); err == nil {
+		return float32(math.Mod(math.Abs(parsed), 360)), 1, true
+	}
+	// contains match, longest name first so 蓝色 wins over 蓝 and "pink" over
+	// nothing shorter; ASCII names require word boundaries ("scarlet" must
+	// not match "red"), CJK names are plain substrings
+	names := make([]string, 0, len(eyeColorHues))
+	for name := range eyeColorHues {
+		names = append(names, name)
+	}
+	sort.Slice(names, func(i, j int) bool {
+		if len(names[i]) != len(names[j]) {
+			return len(names[i]) > len(names[j])
+		}
+		return names[i] < names[j]
+	})
+	padded := " " + t + " "
+	for _, name := range names {
+		if isASCIIString(name) {
+			if strings.Contains(padded, " "+name+" ") {
+				return eyeColorHues[name], 1, true
+			}
+		} else if strings.Contains(t, name) {
+			return eyeColorHues[name], 1, true
+		}
+	}
+	for _, name := range eyeColorWhiteNames {
+		if isASCIIString(name) {
+			if strings.Contains(padded, " "+name+" ") {
+				return 0, 0, true
+			}
+		} else if strings.Contains(t, name) {
+			return 0, 0, true
+		}
+	}
+	return 0, 0, false
+}
+
+// DoSetEyeColor sets the robot's eye color. If the LLM's parameter is empty
+// or unparseable, the color is extracted from the user's own transcribed
+// speech (fallbackText) instead - e.g. the user said "change eye color to
+// blue" but the LLM emitted {{setEyeColor}} without the color.
+func DoSetEyeColor(param string, robot *vector.Vector, fallbackText string) error {
+	hue, saturation, ok := parseEyeColor(param)
+	if !ok && strings.TrimSpace(param) != strings.TrimSpace(fallbackText) {
+		hue, saturation, ok = parseEyeColor(fallbackText)
+		if ok {
+			logger.Println("(eye color) color not in command parameter, took it from the user's speech instead")
+		}
+	}
+	if !ok {
+		logger.Println("(eye color) could not parse eye color parameter: " + param)
+		return nil
+	}
+	logger.Println("(eye color) setting eye color, hue: " + fmt.Sprint(hue) + ", saturation: " + fmt.Sprint(saturation))
 	_, err := robot.Conn.SetEyeColor(
 		context.Background(),
 		&vectorpb.SetEyeColorRequest{
@@ -547,34 +725,44 @@ func DoTurn(param string, robot *vector.Vector) error {
 	return nil
 }
 
-func DoSayText(ctx context.Context, input string, robot *vector.Vector) error {
+func DoSayText(ctx context.Context, input string, robot *vector.Vector, pf *speechPrefetcher) error {
 	// just before vector speaks
 	input = removeSpecialCharacters(input)
+
+	if strings.TrimSpace(input) == "" {
+		return nil
+	}
 
 	// if the response was interrupted, say nothing
 	if ctx.Err() != nil {
 		return nil
 	}
 
-	// Qwen3-TTS (DashScope): API-based speech so the robot can speak Chinese.
-	// In "auto" mode only text containing Chinese characters uses it, so
-	// English keeps the robot's built-in Vector voice.
-	if QwenTTSActive() {
-		if vars.APIConfig.TTS.Mode == "all" || containsCJK(input) {
-			err := DoSayText_Qwen(robot, input, ctx)
-			if err == nil {
-				return nil
-			}
-			logger.Println("(Qwen TTS) error, falling back to robot voice: " + err.Error())
-			logger.LogUI("(Qwen TTS) error, falling back to robot voice: " + err.Error())
-		}
+	// the audio for this sentence was usually prefetched while the previous
+	// sentence was playing, so playback can start immediately; if the text
+	// was never prefetched, synthesize it now (blocks and leaves a gap)
+	chunks, err, ok := pf.get(ctx, input)
+	if !ok {
+		chunks, err = synthesizeSpeech(ctx, input)
 	}
-
-	if (vars.APIConfig.STT.Language != "en-US" && vars.APIConfig.Knowledge.Provider == "openai") || vars.APIConfig.Knowledge.OpenAIVoiceWithEnglish {
-		err := DoSayText_OpenAI(robot, input, ctx)
+	if err == errSpeechBuiltin {
+		return sayTextBuiltin(ctx, robot, input)
+	}
+	if err != nil {
+		if ctx.Err() != nil {
+			return nil
+		}
+		logger.Println("TTS error: " + err.Error())
 		return err
 	}
+	if len(chunks) == 0 {
+		return nil
+	}
+	return playExternalAudioStream(ctx, robot, chunks)
+}
 
+// sayTextBuiltin speaks text with the robot's built-in Vector voice.
+func sayTextBuiltin(ctx context.Context, robot *vector.Vector, input string) error {
 	if ctx.Err() != nil {
 		return nil
 	}
@@ -679,12 +867,14 @@ func playExternalAudioStream(ctx context.Context, robot *vector.Vector, audioChu
 	return nil
 }
 
-func DoSayText_OpenAI(robot *vector.Vector, input string, ctx context.Context) error {
+// synthesizeOpenAI synthesizes text with the OpenAI TTS API and returns the
+// audio as 16 kHz PCM chunks ready for playExternalAudioStream.
+func synthesizeOpenAI(ctx context.Context, input string) ([][]byte, error) {
 	if strings.TrimSpace(input) == "" {
-		return nil
+		return nil, nil
 	}
 	if ctx.Err() != nil {
-		return nil
+		return nil, ctx.Err()
 	}
 	openaiVoice := getOpenAIVoice(vars.APIConfig.Knowledge.OpenAIVoice)
 
@@ -708,14 +898,10 @@ func DoSayText_OpenAI(robot *vector.Vector, input string, ctx context.Context) e
 
 	if err != nil {
 		logger.Println(err)
-		return err
+		return nil, err
 	}
 	speechBytes, _ := io.ReadAll(resp)
-	audioChunks := downsample24kTo16k(speechBytes)
-	if len(audioChunks) == 0 {
-		return nil
-	}
-	return playExternalAudioStream(ctx, robot, audioChunks)
+	return downsample24kTo16k(speechBytes), nil
 }
 
 func DoGetImage(ctx context.Context, msgs []openai.ChatCompletionMessage, param string, robot *vector.Vector) {
@@ -808,6 +994,8 @@ func DoGetImage(ctx context.Context, msgs []openai.ChatCompletionMessage, param 
 		c = openai.NewClientWithConfig(conf)
 	}
 	speakReady := make(chan string)
+	// prefetch TTS audio for upcoming sentences while the current one plays
+	prefetcher := newSpeechPrefetcher(ctx)
 
 	aireq := openai.ChatCompletionRequest{
 		MaxCompletionTokens: 2048,
@@ -865,6 +1053,7 @@ func DoGetImage(ctx context.Context, msgs []openai.ChatCompletionMessage, param 
 					// instead of indexing into an empty slice
 					logger.Println("LLM debug: response has no sentence punctuation, speaking it as one chunk")
 					fullRespSlice = append(fullRespSlice, strings.TrimSpace(fullfullRespText))
+					prefetcher.prefetchSentence(fullRespSlice[0])
 				}
 				isDone = true
 				newStr := fullRespSlice[0]
@@ -920,6 +1109,10 @@ func DoGetImage(ctx context.Context, msgs []openai.ChatCompletionMessage, param 
 				splitResp := strings.Split(strings.TrimSpace(fullRespText), sepStr)
 				fullRespSlice = append(fullRespSlice, strings.TrimSpace(splitResp[0])+sepStr)
 				fullRespText = splitResp[1]
+				if len(fullRespSlice) == 1 {
+					// hide first-sentence synthesis latency
+					prefetcher.prefetchSentence(fullRespSlice[0])
+				}
 				select {
 				case speakReady <- strings.TrimSpace(splitResp[0]) + sepStr:
 				default:
@@ -951,7 +1144,12 @@ func DoGetImage(ctx context.Context, msgs []openai.ChatCompletionMessage, param 
 		}
 		logger.Println(respSlice[numInResp])
 		acts := GetActionsFromString(respSlice[numInResp])
-		PerformActions(ctx, msgs, acts, robot)
+		// kick synthesis for the next sentences while this one plays, so
+		// their audio is ready when it is their turn
+		for i := numInResp + 1; i <= numInResp+speechPrefetchLookahead && i < len(respSlice); i++ {
+			prefetcher.prefetchSentence(respSlice[i])
+		}
+		PerformActions(ctx, msgs, acts, robot, lastUserText(msgs), prefetcher)
 		numInResp = numInResp + 1
 		if stopImaging() {
 			return
@@ -964,7 +1162,31 @@ func DoNewRequest(robot *vector.Vector) {
 	robot.Conn.AppIntent(context.Background(), &vectorpb.AppIntentRequest{Intent: "knowledge_question"})
 }
 
-func PerformActions(ctx context.Context, msgs []openai.ChatCompletionMessage, actions []RobotAction, robot *vector.Vector) bool {
+// lastUserText returns the text of the newest user message in a chat
+// history. Used as a fallback source for command parameters the LLM forgot
+// to include (e.g. {{setEyeColor}} without the color - the user's own
+// words "change eye color to blue" still contain it).
+func lastUserText(msgs []openai.ChatCompletionMessage) string {
+	for i := len(msgs) - 1; i >= 0; i-- {
+		msg := msgs[i]
+		if msg.Role != openai.ChatMessageRoleUser {
+			continue
+		}
+		if msg.Content != "" {
+			return msg.Content
+		}
+		var parts []string
+		for _, part := range msg.MultiContent {
+			if part.Type == openai.ChatMessagePartTypeText {
+				parts = append(parts, part.Text)
+			}
+		}
+		return strings.Join(parts, " ")
+	}
+	return ""
+}
+
+func PerformActions(ctx context.Context, msgs []openai.ChatCompletionMessage, actions []RobotAction, robot *vector.Vector, userText string, pf *speechPrefetcher) bool {
 	// assuming we have behavior control already; if the response gets
 	// interrupted (ctx cancelled), abort the remaining actions immediately
 	for _, action := range actions {
@@ -974,7 +1196,7 @@ func PerformActions(ctx context.Context, msgs []openai.ChatCompletionMessage, ac
 		}
 		switch {
 		case action.Action == ActionSayText:
-			DoSayText(ctx, action.Parameter, robot)
+			DoSayText(ctx, action.Parameter, robot, pf)
 		case action.Action == ActionPlayAnimation:
 			DoPlayAnimation(action.Parameter, robot)
 		case action.Action == ActionPlayAnimationWI:
@@ -988,7 +1210,7 @@ func PerformActions(ctx context.Context, msgs []openai.ChatCompletionMessage, ac
 		case action.Action == ActionPlaySound:
 			DoPlaySound(action.Parameter, robot)
 		case action.Action == ActionSetEyeColor:
-			DoSetEyeColor(action.Parameter, robot)
+			DoSetEyeColor(action.Parameter, robot, userText)
 		case action.Action == ActionSetVolume:
 			DoSetVolume(action.Parameter, robot)
 		case action.Action == ActionMoveHead:

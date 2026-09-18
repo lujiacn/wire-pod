@@ -300,6 +300,9 @@ func StreamingKGSim(req interface{}, esn string, transcribedText string, isKG bo
 	}
 	speakReady := make(chan string)
 	successIntent := make(chan bool)
+	// prefetch TTS audio for upcoming sentences while the current one is
+	// being spoken, so the response plays without gaps between sentences
+	prefetcher := newSpeechPrefetcher(respCtx)
 
 	aireq := CreateAIReq(transcribedText, esn, false, isKG, photoB64)
 
@@ -373,6 +376,7 @@ func StreamingKGSim(req interface{}, esn string, transcribedText string, isKG bo
 					// instead of dropping it
 					logger.Println("LLM debug: response has no sentence punctuation, speaking it as one chunk")
 					fullRespSlice = append(fullRespSlice, strings.TrimSpace(fullfullRespText))
+					prefetcher.prefetchSentence(fullRespSlice[0])
 					fullRespText = ""
 					// the sentence is now queued - signal the main flow,
 					// which is otherwise still waiting for a first sentence
@@ -438,6 +442,11 @@ func StreamingKGSim(req interface{}, esn string, transcribedText string, isKG bo
 				splitResp := strings.SplitN(strings.TrimSpace(fullRespText), sep, 2)
 				fullRespSlice = append(fullRespSlice, strings.TrimSpace(splitResp[0])+sep)
 				fullRespText = splitResp[1]
+				if len(fullRespSlice) == 1 {
+					// hide first-sentence synthesis latency under the
+					// get-in animation that plays before speaking starts
+					prefetcher.prefetchSentence(fullRespSlice[0])
+				}
 				select {
 				case successIntent <- true:
 				default:
@@ -558,8 +567,13 @@ func StreamingKGSim(req interface{}, esn string, transcribedText string, isKG bo
 			}
 			logger.Println(respSlice[numInResp])
 			acts := GetActionsFromString(respSlice[numInResp])
+			// kick synthesis for the next sentences while this one plays,
+			// so their audio is ready when it is their turn
+			for i := numInResp + 1; i <= numInResp+speechPrefetchLookahead && i < len(respSlice); i++ {
+				prefetcher.prefetchSentence(respSlice[i])
+			}
 			nChat[len(nChat)-1].Content = fullRespText
-			disconnect = PerformActions(respCtx, nChat, acts, robot)
+			disconnect = PerformActions(respCtx, nChat, acts, robot, transcribedText, prefetcher)
 			if disconnect || respCtx.Err() != nil {
 				break sentenceLoop
 			}

@@ -42,3 +42,4 @@
 .DS_Store
 /chipper/openaiChats.json
 .buildx-config/
+/.gocache

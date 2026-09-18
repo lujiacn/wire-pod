@@ -13,7 +13,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/fforchino/vector-go-sdk/pkg/vector"
 	"github.com/kercre123/wire-pod/chipper/pkg/logger"
 	"github.com/kercre123/wire-pod/chipper/pkg/vars"
 )
@@ -192,12 +191,16 @@ func dashScopeRequest(ctx context.Context, url, key string, body []byte) ([]byte
 	return base64.RawStdEncoding.DecodeString(qresp.Output.Audio.Data)
 }
 
-// DoSayText_Qwen synthesizes text with Qwen3-TTS and plays it on the robot.
-// If ctx is cancelled mid-playback (barge-in), the audio stops immediately.
-func DoSayText_Qwen(robot *vector.Vector, input string, ctx context.Context) error {
+// synthesizeQwen synthesizes text with Qwen3-TTS and returns the audio as
+// 16 kHz PCM chunks ready for playExternalAudioStream. Synthesis is aborted
+// if ctx is cancelled (barge-in).
+func synthesizeQwen(ctx context.Context, input string) ([][]byte, error) {
 	input = strings.TrimSpace(input)
-	if input == "" || ctx.Err() != nil {
-		return nil
+	if input == "" {
+		return nil, nil
+	}
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
 	}
 	tts := vars.APIConfig.TTS
 	model := strings.TrimSpace(tts.Model)
@@ -245,7 +248,7 @@ func DoSayText_Qwen(robot *vector.Vector, input string, ctx context.Context) err
 			},
 		})
 		if marshalErr != nil {
-			return marshalErr
+			return nil, marshalErr
 		}
 		audioBytes, err = dashScopeRequest(
 			ctx,
@@ -266,7 +269,7 @@ func DoSayText_Qwen(robot *vector.Vector, input string, ctx context.Context) err
 			Input: qwenInput,
 		})
 		if marshalErr != nil {
-			return marshalErr
+			return nil, marshalErr
 		}
 		audioBytes, err = dashScopeRequest(
 			ctx,
@@ -274,13 +277,13 @@ func DoSayText_Qwen(robot *vector.Vector, input string, ctx context.Context) err
 			tts.Key, bodyBytes)
 	}
 	if err != nil {
-		return err
+		return nil, err
 	}
 	logger.Println(reqBodyLog)
 
 	pcm, sampleRate, err := wavToPCM(audioBytes)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	var audioChunks [][]byte
@@ -293,11 +296,10 @@ func DoSayText_Qwen(robot *vector.Vector, input string, ctx context.Context) err
 		audioChunks = chunkPCM16k(pcm16k)
 	}
 	if len(audioChunks) == 0 {
-		return errors.New("qwen tts produced no audio")
+		return nil, errors.New("qwen tts produced no audio")
 	}
 
-	// play on the robot, interruptible via ctx (barge-in cuts the audio)
-	return playExternalAudioStream(ctx, robot, audioChunks)
+	return audioChunks, nil
 }
 
 // wavToPCM parses a RIFF/WAVE file and returns the PCM sample data of the
