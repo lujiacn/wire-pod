@@ -43,3 +43,4 @@
 /chipper/openaiChats.json
 .buildx-config/
 /.gocache
+.gocache/

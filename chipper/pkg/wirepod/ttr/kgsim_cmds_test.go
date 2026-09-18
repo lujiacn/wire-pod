@@ -30,6 +30,12 @@ func TestGetActionsFromString(t *testing.T) {
 		{"volume", "{{setVolume||3}}", ActionSetVolume, "3"},
 		{"animation", "{{playAnimationWI||happy}}", ActionPlayAnimationWI, "happy"},
 		{"drive with distance", "{{drive||forward:300}}", ActionDrive, "forward:300"},
+		{"go home", "{{goHome||now}}", ActionGoHome, "now"},
+		{"go home embedded", "好的，我回家充电了。{{goHome||now}}", ActionGoHome, "now"},
+		{"go home chinese alias", "{{回家||now}}", ActionGoHome, "now"},
+		{"go to sleep", "{{goToSleep||now}}", ActionGoToSleep, "now"},
+		{"go to sleep embedded", "好的，晚安！{{goToSleep||now}}", ActionGoToSleep, "now"},
+		{"go to sleep chinese alias", "{{睡觉吧||now}}", ActionGoToSleep, "now"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -129,6 +135,10 @@ func TestCreatePromptStrictContract(t *testing.T) {
 		"{{setEyeColor||blue}}",
 		"{{setEyeColor||green}}",
 		"把眼睛颜色改成绿色",
+		"{{goToSleep||now}}",
+		"{{goHome||now}}",
+		"睡觉吧",
+		"回家吧",
 	} {
 		if !strings.Contains(strings.ToLower(prompt), strings.ToLower(want)) {
 			t.Fatalf("prompt missing %q", want)

@@ -45,6 +45,10 @@ const (
 	ActionDrive = 9
 	// arg: left / right [:degrees]
 	ActionTurn = 10
+	// arg: now
+	ActionGoHome = 11
+	// arg: now
+	ActionGoToSleep = 12
 	// arg: sound file
 	ActionPlaySound = 4
 )
@@ -191,6 +195,20 @@ var ValidLLMCommands []LLMCommand = []LLMCommand{
 		Action:          ActionTurn,
 		SupportedModels: []string{"all"},
 	},
+	{
+		Command:         "goHome",
+		Description:     "Drives the robot back to its charging station (its home). Only use this if the user explicitly asks you to go home, go to your charger, or go charge yourself (e.g. 回家, 充电). This command should END your response - say a very short goodbye first, then use it. After this command the robot starts driving to the charger, so do not add any more sentences.",
+		ParamChoices:    "now",
+		Action:          ActionGoHome,
+		SupportedModels: []string{"all"},
+	},
+	{
+		Command:         "goToSleep",
+		Description:     "Puts the robot to sleep. Only use this if the user explicitly tells you to go to sleep or go to bed (e.g. 睡觉, 睡觉吧). This is NOT for questions about sleep. This command should END your response - say a very short goodnight first, then use it. After this command the robot goes to sleep, so do not add any more sentences.",
+		ParamChoices:    "now",
+		Action:          ActionGoToSleep,
+		SupportedModels: []string{"all"},
+	},
 	// {
 	// 	Command:      "playSound",
 	// 	Description:  "Plays a sound on the robot.",
@@ -215,7 +233,7 @@ func CreatePrompt(origPrompt string, model string, isKG bool) string {
 	if vars.APIConfig.Knowledge.CommandsEnable {
 		prompt = prompt + "\n\n" + "You are running ON an Anki Vector robot. You have a set of commands to control the robot's body. A command uses the exact syntax {{CommandName||parameter}} and can be embedded anywhere inside your sentences. You may use several commands in one reply. Square brackets ([]) are not valid. If you include an emoji, I will make you start over."
 		prompt = prompt + "\n\n" + "Command rules, follow them exactly: 1. CommandName must be copied character for character from the command list below. Never invent, translate, or rephrase a command name. 2. Every command must include || followed by one parameter. Never write a command without a parameter. 3. The parameter must be one of the command's listed parameter choices, always written in English, no matter which language the user speaks. If the user names a value in another language, translate it into the English parameter choice first. 4. Your spoken reply stays in the user's language; only commands and parameters are always in English. 5. If the command you want doesn't exist or your desired parameter isn't in the list, don't use any command."
-		prompt = prompt + "\n\n" + "Examples. User: How are you feeling? | Response: {{playAnimationWI||sad}} I'm feeling sad... User: Change your eye color to blue. | Response: Sure! {{setEyeColor||blue}} My eyes are blue now. User: 把眼睛颜色改成绿色 | Response: 好的！{{setEyeColor||green}} 我的眼睛变成绿色了。"
+		prompt = prompt + "\n\n" + "Examples. User: How are you feeling? | Response: {{playAnimationWI||sad}} I'm feeling sad... User: Change your eye color to blue. | Response: Sure! {{setEyeColor||blue}} My eyes are blue now. User: 把眼睛颜色改成绿色 | Response: 好的！{{setEyeColor||green}} 我的眼睛变成绿色了。 User: 睡觉吧 | Response: 好的，晚安！{{goToSleep||now}} User: 回家吧 | Response: 好的，我回家充电了。{{goHome||now}}"
 		prompt = prompt + "\n\n" + "Use the playAnimation or playAnimationWI commands if you want to express emotion! You are very animated and good at following instructions. Animation takes precendence over words. You are to include many animations in your response.\n\nHere is every valid command:"
 		for _, cmd := range ValidLLMCommands {
 			if ModelIsSupported(cmd, model) {
@@ -314,6 +332,25 @@ var commandAliases = map[string]string{
 	"takeapicture":      "getImage",
 	"takepicture":       "getImage",
 	"newrequest":        "newVoiceRequest",
+	"gotohome":          "goHome",
+	"drivetocharger":    "goHome",
+	"gotocharger":       "goHome",
+	"drivetochargingstation": "goHome",
+	"charge":            "goHome",
+	"gocharge":          "goHome",
+	"回家":              "goHome",
+	"回家吧":             "goHome",
+	"回充电座":            "goHome",
+	"去充电":             "goHome",
+	"充电":              "goHome",
+	"sleep":             "goToSleep",
+	"gotobed":           "goToSleep",
+	"fallasleep":        "goToSleep",
+	"睡觉":              "goToSleep",
+	"睡觉吧":             "goToSleep",
+	"去睡觉":             "goToSleep",
+	"睡眠":              "goToSleep",
+	"晚安":              "goToSleep",
 }
 
 // normalizeCommandName lowercases and strips everything except letters and
@@ -1204,6 +1241,35 @@ func DoNewRequest(robot *vector.Vector) {
 	robot.Conn.AppIntent(context.Background(), &vectorpb.AppIntentRequest{Intent: "knowledge_question"})
 }
 
+// DoGoHome drives the robot back to its charging station, like the native
+// "go home" voice command (intent_system_charger). The intent must be sent
+// after the LLM response has released behavior control, otherwise the
+// robot's own behavior engine cannot run it - so it fires from a goroutine
+// after a delay (same pattern as DoNewRequest).
+func DoGoHome(robot *vector.Vector) {
+	logger.Println("(go home) scheduling intent_system_charger after behavior control release")
+	go func() {
+		time.Sleep(time.Millisecond * 1500)
+		_, err := robot.Conn.AppIntent(context.Background(), &vectorpb.AppIntentRequest{Intent: "intent_system_charger"})
+		if err != nil {
+			logger.Println("(go home) error sending intent: " + err.Error())
+		}
+	}()
+}
+
+// DoGoToSleep puts the robot to sleep, like the native "go to sleep" voice
+// command (intent_system_sleep). See DoGoHome for why it is delayed.
+func DoGoToSleep(robot *vector.Vector) {
+	logger.Println("(go to sleep) scheduling intent_system_sleep after behavior control release")
+	go func() {
+		time.Sleep(time.Millisecond * 1500)
+		_, err := robot.Conn.AppIntent(context.Background(), &vectorpb.AppIntentRequest{Intent: "intent_system_sleep"})
+		if err != nil {
+			logger.Println("(go to sleep) error sending intent: " + err.Error())
+		}
+	}()
+}
+
 // lastUserText returns the text of the newest user message in a chat
 // history. Used as a fallback source for command parameters the LLM forgot
 // to include (e.g. {{setEyeColor}} without the color - the user's own
@@ -1248,6 +1314,15 @@ func PerformActions(ctx context.Context, msgs []openai.ChatCompletionMessage, ac
 			return true
 		case action.Action == ActionGetImage:
 			DoGetImage(ctx, msgs, action.Parameter, robot)
+			return true
+		case action.Action == ActionGoHome:
+			// end the response: the rest of the sentence loop is pointless
+			// once the robot starts driving to its charger
+			DoGoHome(robot)
+			return true
+		case action.Action == ActionGoToSleep:
+			// end the response: the robot is going to sleep
+			DoGoToSleep(robot)
 			return true
 		case action.Action == ActionPlaySound:
 			DoPlaySound(action.Parameter, robot)

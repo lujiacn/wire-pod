@@ -25,11 +25,11 @@
 	},
 	{	
 		"name": "intent_system_charger", 
-		"keyphrases" : ["回家", "充电" ]
+		"keyphrases" : ["回家", "充电", "回充电座", "去充电" ]
 	},
 		{	
 		"name": "intent_system_sleep",
-		"keyphrases" : ["睡觉", "去 睡觉", "睡吧" ]
+		"keyphrases" : ["睡觉", "去 睡觉", "去睡觉", "睡吧", "该睡觉了" ]
 	},
 	{	
 		"name": "intent_greeting_goodmorning", 
