@@ -221,5 +221,10 @@
   {
     "name": "intent_play_keepaway",
     "keyphrases": [ "Geh weg", "Weg", "Weg gehen", "Entfern dich", "Entferne dich", "Zurück gehen", "Gehe zurück", "Geh zurück", "Hau ab", "Haue ab", "Verziehe dich", "Verzieh dich", "Lass mich in Ruhe", "Zieh ab", "Verschwinde", "Verschwinde gefälligst", "Mach dich vom Acker", "Verpiss dich" ]
-  }
+  },
+	{
+		"name": "intent_battery_level",
+		"keyphrases": ["akkustand", "akku stand", "batteriestatus", "wie viel akku", "batterie level", "akku prozent", "wie ist mein akku" ],
+		"requiresexact": false
+	}
 ]

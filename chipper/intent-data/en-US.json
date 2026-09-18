@@ -273,5 +273,10 @@
 		"name": "intent_play_keepaway",
 		"keyphrases": ["keepaway", "keep away", "play keepaway" ],
 		"requiresexact": false
+	},
+	{
+		"name": "intent_battery_level",
+		"keyphrases": ["battery level", "battery percentage", "battery status", "how much battery", "battery remaining", "your battery level", "what's your battery", "whats your battery" ],
+		"requiresexact": false
 	}
 ]

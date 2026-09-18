@@ -214,5 +214,10 @@
   {
     "name": "intent_play_keepaway",
     "keyphrases": ["stai lontano", "via", "allontanati", "indietro", "avvia keepaway", "tira il cubo", "chi è più veloce"]
-  }
+  },
+	{
+		"name": "intent_battery_level",
+		"keyphrases": ["livello batteria", "livello della batteria", "percentuale batteria", "quanta batteria", "stato della batteria", "batteria rimanente" ],
+		"requiresexact": false
+	}
 ]

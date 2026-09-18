@@ -103,6 +103,12 @@ func ParamChecker(req interface{}, intent string, speechText string, botSerial s
 		}
 	}
 	logger.Println("Checking params for candidate intent " + intent)
+	if strings.Contains(intent, "intent_battery_level") {
+		// dynamic spoken response: SayBatteryLevel queries the battery over
+		// the SDK, closes the voice command and speaks the level itself
+		SayBatteryLevel(req, speechText)
+		return
+	}
 	if strings.Contains(intent, "intent_photo_take_extend") {
 		isParam = true
 		newIntent = intent
@@ -526,6 +532,12 @@ func prehistoricParamChecker(req interface{}, intent string, speechText string) 
 	var intentParams map[string]string
 	var botLocation string = "San Francisco"
 	var botUnits string = "F"
+	if strings.Contains(intent, "intent_battery_level") {
+		// dynamic spoken response: SayBatteryLevel queries the battery over
+		// the SDK, closes the voice command and speaks the level itself
+		SayBatteryLevel(req, speechText)
+		return
+	}
 	if strings.Contains(intent, "intent_photo_take_extend") {
 		isParam = true
 		newIntent = intent

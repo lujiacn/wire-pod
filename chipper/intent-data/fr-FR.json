@@ -273,5 +273,10 @@
 		"name": "intent_play_keepaway",
 		"keyphrases": ["va-t'en", "éloigne-toi", "reste loin", "dégage", "fou le camp", "loin" ],
 		"requiresexact": false
+	},
+	{
+		"name": "intent_battery_level",
+		"keyphrases": ["niveau de batterie", "niveau de la batterie", "pourcentage de batterie", "combien de batterie", "état de la batterie", "batterie restante" ],
+		"requiresexact": false
 	}
 ]

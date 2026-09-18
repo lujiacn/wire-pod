@@ -268,5 +268,10 @@
 		"name": "intent_play_keepaway",
 		"keyphrases": ["큐브 잡아 봐", "키프어웨이 놀이하자", "킵어웨이 놀이", "킵어웨이", "키프어웨이", "큐브 잡아", "깊어 회의", "어우 회의", "회의", "큐브 잡아 과", "큐브 잡아", "잡아", "윞 어웨이", "어웨이", "웨일" ],
 		"requiresexact": false
+	},
+	{
+		"name": "intent_battery_level",
+		"keyphrases": ["배터리 잔량", "배터리 상태", "배터리 얼마", "배터리 퍼센트", "배터리 레벨", "배터리 얼마나" ],
+		"requiresexact": false
 	}
 ]

@@ -262,5 +262,10 @@
 		"name": "intent_play_keepaway",
 		"keyphrases": ["keepaway", "keep away", "play keepaway", "speel houdt weg", "houdt weg" ],
 		"requiresexact": false
+	},
+	{
+		"name": "intent_battery_level",
+		"keyphrases": ["batterij niveau", "batterijniveau", "batterij status", "batterijstatus", "hoeveel batterij", "batterij percentage" ],
+		"requiresexact": false
 	}
 ]

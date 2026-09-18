@@ -214,5 +214,10 @@
 	{	
 		"name": "intent_play_keepaway",
 		"keyphrases": ["滚开", "远" ]
+	},
+	{
+		"name": "intent_battery_level",
+		"keyphrases": ["现在的电量", "现在 的 电量", "还有多少电", "还剩多少电", "剩余电量", "剩余 电量", "电量多少", "电池电量", "电量", "电 量" ],
+		"requiresexact": false
 	}
 ]

@@ -214,5 +214,10 @@
 	{	
 		"name": "intent_play_keepaway",
 		"keyphrases": ["afaste", "vai pra lá", "fica longe" ]
+	},
+	{
+		"name": "intent_battery_level",
+		"keyphrases": ["nível da bateria", "nível de bateria", "porcentagem da bateria", "quanta bateria", "estado da bateria", "bateria restante" ],
+		"requiresexact": false
 	}
 ]

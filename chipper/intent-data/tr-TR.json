@@ -214,5 +214,10 @@
   {
     "name": "intent_play_keepaway",
     "keyphrases": ["uzak tut", "uzak dur", "uzak tutma oyunu oyna"]
-  }
+  },
+	{
+		"name": "intent_battery_level",
+		"keyphrases": ["pil seviyesi", "pil durumu", "pil yüzdesi", "ne kadar pil", "şarj seviyesi", "pil ne kadar" ],
+		"requiresexact": false
+	}
 ]

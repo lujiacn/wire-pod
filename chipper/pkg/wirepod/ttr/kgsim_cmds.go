@@ -821,6 +821,10 @@ func getOpenAIVoice(voice string) openai.SpeechVoice {
 // The stream is tied to ctx, so a barge-in (ctx cancelled) tears the stream
 // down and the robot stops the audio immediately.
 func playExternalAudioStream(ctx context.Context, robot *vector.Vector, audioChunks [][]byte) error {
+	// the firmware does not apply the robot's master volume to external
+	// audio streams, so scale the PCM digitally to match the volume the
+	// user set by voice (or in the web UI)
+	applyMasterVolumeGain(robot, audioChunks)
 	vclient, err := robot.Conn.ExternalAudioStreamPlayback(ctx)
 	if err != nil {
 		return err

@@ -214,5 +214,10 @@
     {
         "name": "intent_play_keepaway",
         "keyphrases": ["Đi chỗ khác", "Xa ra"]
-    }
+    },
+	{
+		"name": "intent_battery_level",
+		"keyphrases": ["mức pin", "pin còn bao nhiêu", "phần trăm pin", "tình trạng pin", "bao nhiêu pin", "pin còn lại" ],
+		"requiresexact": false
+	}
 ]

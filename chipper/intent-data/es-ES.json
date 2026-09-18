@@ -214,5 +214,10 @@
   {
     "name": "intent_play_keepaway",
     "keyphrases" : [ "vete", "vaya", "váyase", "regrese" ]
-  }
+  },
+	{
+		"name": "intent_battery_level",
+		"keyphrases": ["nivel de batería", "porcentaje de batería", "cuánta batería", "cuanta batería", "estado de la batería", "batería restante" ],
+		"requiresexact": false
+	}
 ]

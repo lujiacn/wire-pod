@@ -214,5 +214,10 @@
   {
     "name": "intent_play_keepaway",
     "keyphrases": [ "nie zbliżaj się", "odejdź", "nie teraz", "nie chcę"]
-  }
+  },
+	{
+		"name": "intent_battery_level",
+		"keyphrases": ["poziom baterii", "ile baterii", "stan baterii", "procent baterii", "jaki poziom baterii" ],
+		"requiresexact": false
+	}
 ]
