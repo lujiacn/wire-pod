@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"strings"
 	"time"
 
 	"github.com/fforchino/vector-go-sdk/pkg/vector"
@@ -104,6 +105,39 @@ func batterySpeechText(pct int, ok bool, isCharging bool, isLow bool) string {
 		out = out + " " + texts.Low
 	}
 	return out
+}
+
+// IsBatteryQuery reports whether voiceText matches one of the
+// intent_battery_level keyphrases from the loaded intent data. Besides the
+// regular (case-insensitive) perfect/substring matching, the comparison is
+// also done with all spaces removed, because STT engines insert arbitrary
+// spaces into CJK text ("现 在 的 电 量") which would otherwise never match
+// the keyphrases.
+func IsBatteryQuery(voiceText string) bool {
+	lower := strings.ToLower(voiceText)
+	compact := strings.ReplaceAll(lower, " ", "")
+	for _, intent := range vars.IntentList {
+		if intent.Name != "intent_battery_level" {
+			continue
+		}
+		for _, keyphrase := range intent.Keyphrases {
+			kpLower := strings.ToLower(keyphrase)
+			if kpLower == "" {
+				continue
+			}
+			if lower == kpLower || (!intent.RequireExactMatch && strings.Contains(lower, kpLower)) {
+				return true
+			}
+			kpCompact := strings.ReplaceAll(kpLower, " ", "")
+			if kpCompact == "" {
+				continue
+			}
+			if compact == kpCompact || (!intent.RequireExactMatch && strings.Contains(compact, kpCompact)) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // SayBatteryLevel handles the intent_battery_level intent: it queries the

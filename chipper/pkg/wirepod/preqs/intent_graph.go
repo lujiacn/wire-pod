@@ -38,6 +38,14 @@ func (s *Server) ProcessIntentGraph(req *vtt.IntentGraphRequest) (*vtt.IntentGra
 			// always-LLM mode: send every request straight to the LLM, which
 			// is much more accurate than the internal intent matching. if the
 			// LLM is not accessible, fall back to the internal intents
+			// exception: battery queries are answered locally from the
+			// robot's actual battery state - the LLM has no access to it
+			if ttr.IsBatteryQuery(transcribedText) {
+				logger.Println("Bot " + speechReq.Device + " battery query matched, answering locally")
+				ttr.SayBatteryLevel(req, transcribedText)
+				logger.Println("Bot " + speechReq.Device + " request served.")
+				return nil, nil
+			}
 			logger.Println("Making LLM request for device " + req.Device + " (always-LLM mode)...")
 			_, llmErr := ttr.StreamingKGSim(req, req.Device, transcribedText, false, waitEnvPhoto(photoCh))
 			if llmErr != nil {

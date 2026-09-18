@@ -262,6 +262,14 @@ func ProcessTextAll(req interface{}, voiceText string, intents []vars.JsonIntent
 	customIntentMatched := customIntentHandler(req, voiceText, botSerial)
 	if !customIntentMatched && !pluginMatched {
 		logger.Println("Not a custom intent")
+		// battery queries are answered locally from the robot's actual
+		// battery state; IsBatteryQuery also matches with spaces removed,
+		// so CJK STT spacing variations still hit
+		if IsBatteryQuery(voiceText) {
+			logger.Println("Bot " + botSerial + " battery query matched, answering locally")
+			SayBatteryLevel(req, voiceText)
+			return true
+		}
 		// Look for a perfect match first
 		for _, b := range intents {
 			for _, c := range b.Keyphrases {
