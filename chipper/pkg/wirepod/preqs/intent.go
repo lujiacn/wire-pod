@@ -47,6 +47,12 @@ func (s *Server) ProcessIntent(req *vtt.IntentRequest) (*vtt.IntentResponse, err
 				logger.Println("Bot " + speechReq.Device + " request served.")
 				return nil, nil
 			}
+			if ttr.IsWhoAmIQuery(transcribedText) {
+				logger.Println("Bot " + speechReq.Device + " who-am-I query matched, answering locally via face recognition")
+				ttr.SayWhoAmI(req, transcribedText)
+				logger.Println("Bot " + speechReq.Device + " request served.")
+				return nil, nil
+			}
 			logger.Println("Making LLM request for device " + req.Device + " (always-LLM mode)...")
 			_, llmErr := ttr.StreamingKGSim(req, req.Device, transcribedText, false, waitEnvPhoto(photoCh))
 			if llmErr != nil {

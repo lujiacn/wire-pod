@@ -270,6 +270,13 @@ func ProcessTextAll(req interface{}, voiceText string, intents []vars.JsonIntent
 			SayBatteryLevel(req, voiceText)
 			return true
 		}
+		// "who am I" is answered locally from the robot's actual face
+		// recognition over the SDK (enrolled faces + observed-face events)
+		if IsWhoAmIQuery(voiceText) {
+			logger.Println("Bot " + botSerial + " who-am-I query matched, answering locally via face recognition")
+			SayWhoAmI(req, voiceText)
+			return true
+		}
 		// Look for a perfect match first
 		for _, b := range intents {
 			for _, c := range b.Keyphrases {

@@ -109,6 +109,13 @@ func ParamChecker(req interface{}, intent string, speechText string, botSerial s
 		SayBatteryLevel(req, speechText)
 		return
 	}
+	if strings.Contains(intent, "intent_names_ask") {
+		// dynamic spoken response: SayWhoAmI asks the robot's face
+		// recognition over the SDK, closes the voice command and speaks
+		// the recognized name itself
+		SayWhoAmI(req, speechText)
+		return
+	}
 	if strings.Contains(intent, "intent_photo_take_extend") {
 		isParam = true
 		newIntent = intent
@@ -536,6 +543,13 @@ func prehistoricParamChecker(req interface{}, intent string, speechText string) 
 		// dynamic spoken response: SayBatteryLevel queries the battery over
 		// the SDK, closes the voice command and speaks the level itself
 		SayBatteryLevel(req, speechText)
+		return
+	}
+	if strings.Contains(intent, "intent_names_ask") {
+		// dynamic spoken response: SayWhoAmI asks the robot's face
+		// recognition over the SDK, closes the voice command and speaks
+		// the recognized name itself
+		SayWhoAmI(req, speechText)
 		return
 	}
 	if strings.Contains(intent, "intent_photo_take_extend") {

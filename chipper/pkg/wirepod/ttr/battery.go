@@ -24,9 +24,14 @@ import (
 // the SDK using the configured TTS pipeline, so non-English languages
 // (e.g. Chinese via Qwen TTS) work too.
 
-// Vector's single-cell LiPo battery: ~4.2V when full, ~3.5V when empty.
+// Vector's single-cell LiPo battery. The voltage-to-percentage mapping is
+// the same logarithmic discharge curve the web UI uses
+// (webroot/js/battery.js getBatteryPercentage), so the spoken battery
+// answer matches what the web interface shows for the same robot: 4.1V is
+// full, 3.85V is the midpoint at 80%, 3.5V is empty.
 const (
-	batteryFullVolts  = 4.2
+	batteryFullVolts  = 4.1
+	batteryMidVolts   = 3.85
 	batteryEmptyVolts = 3.5
 )
 
@@ -58,33 +63,49 @@ var batteryTexts = map[string]batterySpeechStrings{
 	"ko-KR": {"제 배터리는 %d 퍼센트예요.", "지금 충전 중이에요, 배터리는 %d 퍼센트예요.", "배터리가 부족해요, 충전하러 가야 해요.", "죄송해요, 지금은 배터리 잔량을 읽을 수 없어요."},
 }
 
-// batteryPercent estimates the charge percentage from the battery voltage.
-// Falls back to a coarse value from the firmware's battery level enum when
-// the voltage reading is missing.
+// batteryPercent estimates the charge percentage from the battery state,
+// consistent with the web UI: a full battery is always 100%, a missing
+// voltage reading (the bot was turned on whilst off the charger, so the
+// BatteryState response carries no voltage) assumes a reasonable 70%, and
+// everything else follows the logarithmic discharge curve.
 func batteryPercent(resp *vectorpb.BatteryStateResponse) (int, bool) {
-	volts := float64(resp.GetBatteryVolts())
-	if volts > 0.5 {
-		pct := int(math.Round((volts - batteryEmptyVolts) / (batteryFullVolts - batteryEmptyVolts) * 100))
-		if pct < 0 {
-			pct = 0
-		}
-		if pct > 100 {
-			pct = 100
-		}
-		if resp.GetBatteryLevel() == vectorpb.BatteryLevel_BATTERY_LEVEL_FULL && pct > 95 {
-			pct = 100
-		}
-		return pct, true
-	}
-	switch resp.GetBatteryLevel() {
-	case vectorpb.BatteryLevel_BATTERY_LEVEL_FULL:
+	if resp.GetBatteryLevel() == vectorpb.BatteryLevel_BATTERY_LEVEL_FULL {
 		return 100, true
-	case vectorpb.BatteryLevel_BATTERY_LEVEL_NOMINAL:
-		return 50, true
-	case vectorpb.BatteryLevel_BATTERY_LEVEL_LOW:
-		return 10, true
 	}
-	return 0, false
+	volts := float64(resp.GetBatteryVolts())
+	if volts <= 0.5 {
+		return 70, true
+	}
+	return batteryPercentFromVolts(volts), true
+}
+
+// batteryPercentFromVolts maps a battery voltage to a percentage using the
+// same logarithmic discharge curve as the web UI
+// (webroot/js/battery.js getBatteryPercentage): a fast drop from 100% to
+// 80% between 4.1V and 3.85V, then a gradual drop from 80% to 0% between
+// 3.85V and 3.5V.
+func batteryPercentFromVolts(volts float64) int {
+	var pct float64
+	switch {
+	case volts >= batteryFullVolts:
+		pct = 100
+	case volts >= batteryMidVolts:
+		scaled := (volts - batteryMidVolts) / (batteryFullVolts - batteryMidVolts)
+		pct = 80 + 20*math.Log10(1+scaled*9)
+	case volts >= batteryEmptyVolts:
+		scaled := (volts - batteryEmptyVolts) / (batteryMidVolts - batteryEmptyVolts)
+		pct = 80 * math.Log10(1+scaled*9)
+	default:
+		pct = 0
+	}
+	p := int(math.Round(pct))
+	if p < 0 {
+		p = 0
+	}
+	if p > 100 {
+		p = 100
+	}
+	return p
 }
 
 func batterySpeechText(pct int, ok bool, isCharging bool, isLow bool) string {
@@ -190,14 +211,15 @@ func SayBatteryLevel(req interface{}, speechText string) {
 	logger.LogUI("Bot " + esn + " battery level: " + fmt.Sprint(pct) + "%, volts: " + fmt.Sprint(batteryResp.GetBatteryVolts()) + ", charging: " + fmt.Sprint(batteryResp.GetIsCharging()))
 	// close the voice command, then speak the answer over the SDK
 	IntentPass(req, "intent_greeting_hello", speechText, map[string]string{}, false)
-	go speakBatteryText(esn, robot, text)
+	go speakLocalAnswer(esn, robot, text)
 }
 
-// speakBatteryText speaks text on the robot using the configured TTS
-// pipeline (DoSayText -> API TTS when configured, built-in Vector voice
-// otherwise). Modeled on the speaking part of StreamingKGSim, with the
-// same barge-in support.
-func speakBatteryText(esn string, robot *vector.Vector, text string) {
+// speakLocalAnswer speaks a locally-computed answer (battery level, face
+// recognition result, ...) on the robot using the configured TTS pipeline
+// (DoSayText -> API TTS when configured, built-in Vector voice otherwise).
+// Modeled on the speaking part of StreamingKGSim, with the same barge-in
+// support.
+func speakLocalAnswer(esn string, robot *vector.Vector, text string) {
 	respCtx, respCancel := context.WithCancel(context.Background())
 	defer respCancel()
 	respHandle := RegisterActiveResponse(esn, respCancel)
@@ -217,7 +239,7 @@ func speakBatteryText(esn string, robot *vector.Vector, text string) {
 	case <-start:
 	case <-respCtx.Done():
 	case <-time.After(8 * time.Second):
-		logger.Println("Battery: behavior control was not granted after 8 seconds, continuing anyway (robot may stay silent)")
+		logger.Println("Local answer: behavior control was not granted after 8 seconds, continuing anyway (robot may stay silent)")
 	}
 	if respCtx.Err() == nil {
 		robot.Conn.PlayAnimation(
@@ -252,7 +274,7 @@ func speakBatteryText(esn string, robot *vector.Vector, text string) {
 		pf := newSpeechPrefetcher(respCtx)
 		pf.prefetchText(text)
 		if err := DoSayText(respCtx, text, robot, pf); err != nil {
-			logger.Println("Battery: error speaking text: " + err.Error())
+			logger.Println("Local answer: error speaking text: " + err.Error())
 		}
 		stopTTSLoop = true
 		<-TTSLoopStopped

@@ -52,12 +52,18 @@ func TestIsBatteryQueryEmptyIntentList(t *testing.T) {
 }
 
 func TestBatteryPercent(t *testing.T) {
+	// the logarithmic discharge curve, same as the web UI
+	// (webroot/js/battery.js getBatteryPercentage): 100% at 4.1V, 80% at
+	// 3.85V, 0% at 3.5V, log10-scaled in between
 	for _, tc := range []struct {
 		volts float32
 		want  int
 	}{
 		{4.2, 100},
-		{3.85, 50},
+		{4.1, 100},
+		{3.975, 95}, // middle of the 4.1V-3.85V range: 80 + 20*log10(5.5)
+		{3.85, 80},
+		{3.675, 59}, // middle of the 3.85V-3.5V range: 80*log10(5.5)
 		{3.5, 0},
 		{4.35, 100}, // over full -> clamped
 		{3.4, 0},    // under empty -> clamped
@@ -68,29 +74,26 @@ func TestBatteryPercent(t *testing.T) {
 		}
 	}
 
-	// no voltage reading -> coarse fallback via the firmware level enum
+	// the firmware reports a full battery -> always 100%
 	resp := &vectorpb.BatteryStateResponse{BatteryLevel: vectorpb.BatteryLevel_BATTERY_LEVEL_FULL}
 	if got, ok := batteryPercent(resp); !ok || got != 100 {
 		t.Errorf("batteryPercent(FULL) = %d, %v; want 100, true", got, ok)
 	}
-	resp = &vectorpb.BatteryStateResponse{BatteryLevel: vectorpb.BatteryLevel_BATTERY_LEVEL_NOMINAL}
-	if got, ok := batteryPercent(resp); !ok || got != 50 {
-		t.Errorf("batteryPercent(NOMINAL) = %d, %v; want 50, true", got, ok)
-	}
-	resp = &vectorpb.BatteryStateResponse{BatteryLevel: vectorpb.BatteryLevel_BATTERY_LEVEL_LOW}
-	if got, ok := batteryPercent(resp); !ok || got != 10 {
-		t.Errorf("batteryPercent(LOW) = %d, %v; want 10, true", got, ok)
-	}
-	// nothing readable at all
-	resp = &vectorpb.BatteryStateResponse{}
-	if _, ok := batteryPercent(resp); ok {
-		t.Error("batteryPercent(UNKNOWN) should report ok=false")
+	// full battery with a slightly sagged voltage snaps to 100%
+	resp = &vectorpb.BatteryStateResponse{BatteryVolts: 3.9, BatteryLevel: vectorpb.BatteryLevel_BATTERY_LEVEL_FULL}
+	if got, ok := batteryPercent(resp); !ok || got != 100 {
+		t.Errorf("batteryPercent(3.9V, FULL) = %d, %v; want 100, true", got, ok)
 	}
 
-	// full battery with a slightly sagged voltage snaps to 100%
-	resp = &vectorpb.BatteryStateResponse{BatteryVolts: 4.18, BatteryLevel: vectorpb.BatteryLevel_BATTERY_LEVEL_FULL}
-	if got, ok := batteryPercent(resp); !ok || got != 100 {
-		t.Errorf("batteryPercent(4.18V, FULL) = %d, %v; want 100, true", got, ok)
+	// no voltage reading (bot turned on whilst off the charger) -> assume a
+	// reasonable 70%, same as the web UI
+	resp = &vectorpb.BatteryStateResponse{}
+	if got, ok := batteryPercent(resp); !ok || got != 70 {
+		t.Errorf("batteryPercent(no voltage) = %d, %v; want 70, true", got, ok)
+	}
+	resp = &vectorpb.BatteryStateResponse{BatteryLevel: vectorpb.BatteryLevel_BATTERY_LEVEL_NOMINAL}
+	if got, ok := batteryPercent(resp); !ok || got != 70 {
+		t.Errorf("batteryPercent(NOMINAL, no voltage) = %d, %v; want 70, true", got, ok)
 	}
 }
 
