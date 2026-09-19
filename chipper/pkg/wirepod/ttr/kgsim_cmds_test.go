@@ -114,10 +114,43 @@ func TestParseEyeColorWordBoundaries(t *testing.T) {
 	// "scarlet" is a color (red), but padding must prevent arbitrary
 	// substring hits - e.g. "wintered" must not match "red"
 	if _, _, ok := parseEyeColor("wintered"); ok {
-		t.Fatal("'wintered' must not match any color")
+		t.Fatal("'wintered" + "' must not match any color")
 	}
 	if h, _, ok := parseEyeColor("scarlet"); !ok || h != 0 {
 		t.Fatalf("'scarlet' should match red hue 0, got %v/%v", h, ok)
+	}
+}
+
+// the robot's SetEyeColor and custom_eye_color setting take hue as a 0-1
+// fraction, NOT degrees. The original bug sent degrees (blue = 240) which
+// the firmware truncated to 0 = red. These tests pin the conversion.
+func TestHueDegreesToFraction(t *testing.T) {
+	cases := []struct {
+		degrees float32
+		want    float32
+	}{
+		{0, 0},
+		{30, 30.0 / 360.0},
+		{60, 60.0 / 360.0},
+		{120, 120.0 / 360.0},
+		{180, 0.5},
+		{240, 240.0 / 360.0},
+		{285, 285.0 / 360.0},
+		{330, 330.0 / 360.0},
+	}
+	for _, c := range cases {
+		got := hueDegreesToFraction(c.degrees)
+		if got != c.want {
+			t.Fatalf("hueDegreesToFraction(%v) = %v, want %v", c.degrees, got, c.want)
+		}
+		if got < 0 || got > 1 {
+			t.Fatalf("hueDegreesToFraction(%v) = %v, out of the 0-1 range the firmware expects", c.degrees, got)
+		}
+	}
+	// the reported bug: "change eye color to blue" must land in the blue
+	// part of the wheel (2/3), not wrap to red (0)
+	if got := hueDegreesToFraction(240); got < 0.6 || got > 0.7 {
+		t.Fatalf("blue (240 deg) converted to %v - this is what made blue show up red", got)
 	}
 }
 

@@ -1,12 +1,15 @@
 package wirepod_ttr
 
 import (
+	"bytes"
 	"context"
+	"crypto/tls"
 	"encoding/base64"
 	"errors"
 	"fmt"
 	"io"
 	"math"
+	"net/http"
 	"os"
 	"sort"
 	"strconv"
@@ -578,6 +581,13 @@ func parseEyeColor(text string) (hue float32, saturation float32, ok bool) {
 	return 0, 0, false
 }
 
+// hueDegreesToFraction converts a hue in degrees (0-359) to the 0-1
+// fraction the robot's SetEyeColor and custom_eye_color setting expect.
+// Red = 0, green = 1/3, blue = 2/3.
+func hueDegreesToFraction(degrees float32) float32 {
+	return degrees / 360.0
+}
+
 // DoSetEyeColor sets the robot's eye color. If the LLM's parameter is empty
 // or unparseable, the color is extracted from the user's own transcribed
 // speech (fallbackText) instead - e.g. the user said "change eye color to
@@ -594,34 +604,85 @@ func DoSetEyeColor(param string, robot *vector.Vector, fallbackText string) erro
 		logger.Println("(eye color) could not parse eye color parameter: " + param)
 		return nil
 	}
-	logger.Println("(eye color) setting eye color, hue: " + fmt.Sprint(hue) + ", saturation: " + fmt.Sprint(saturation))
+	// the firmware takes hue and saturation as 0-1 fractions, not degrees -
+	// parseEyeColor returns hue in degrees (0-359), so convert. Sending
+	// degrees (e.g. blue = 240) gets truncated by the firmware to 0 = red.
+	hueFraction := hueDegreesToFraction(hue)
+	logger.Println("(eye color) setting eye color, hue: " + fmt.Sprint(hue) + " deg (" + fmt.Sprint(hueFraction) + "), saturation: " + fmt.Sprint(saturation))
 	_, err := robot.Conn.SetEyeColor(
 		context.Background(),
 		&vectorpb.SetEyeColorRequest{
-			Hue:        hue,
+			Hue:        hueFraction,
 			Saturation: saturation,
 		},
 	)
 	if err != nil {
 		logger.Println("(eye color) error: " + err.Error())
+		return nil
 	}
+	// SetEyeColor is a temporary overlay - the robot restores its stored
+	// settings as soon as this SDK program releases behavior control. Save
+	// the color as the robot's custom_eye_color setting so it sticks.
+	persistEyeColorSetting(robot, hueFraction, saturation)
 	return nil
+}
+
+// persistEyeColorSetting writes the color into the robot's own settings
+// (custom_eye_color), the same way the web UI does, so the eye color
+// survives the end of the SDK behavior-control session.
+func persistEyeColorSetting(robot *vector.Vector, hueFraction, saturation float32) {
+	if robot == nil || robot.Cfg.Target == "" || robot.Cfg.Token == "" {
+		return
+	}
+	url := "https://" + robot.Cfg.Target + "/v1/update_settings"
+	updateJSON := []byte(`{"update_settings": true, "settings": {"custom_eye_color": {"enabled": true, "hue": ` +
+		strconv.FormatFloat(float64(hueFraction), 'f', 4, 32) +
+		`, "saturation": ` + strconv.FormatFloat(float64(saturation), 'f', 4, 32) + `} } }`)
+	req, err := http.NewRequest("POST", url, bytes.NewBuffer(updateJSON))
+	if err != nil {
+		return
+	}
+	req.Header.Set("Authorization", "Bearer "+robot.Cfg.Token)
+	req.Header.Set("Content-Type", "application/json")
+	client := &http.Client{
+		Timeout: 5 * time.Second,
+		Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: true}, // robot uses a self-signed cert
+		},
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		logger.Println("(eye color) could not persist eye color setting: " + err.Error())
+		return
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= 300 {
+		logger.Println("(eye color) could not persist eye color setting, robot returned " + resp.Status)
+		return
+	}
+	logger.Println("(eye color) saved as custom_eye_color in robot settings")
 }
 
 func DoSetVolume(param string, robot *vector.Vector) error {
 	param = strings.ToLower(strings.TrimSpace(param))
 	var level vectorpb.MasterVolumeLevel
+	var settingLevel int
 	switch param {
 	case "1", "low":
 		level = vectorpb.MasterVolumeLevel_VOLUME_LOW
+		settingLevel = 1
 	case "2":
 		level = vectorpb.MasterVolumeLevel_VOLUME_MEDIUM_LOW
+		settingLevel = 2
 	case "3", "medium":
 		level = vectorpb.MasterVolumeLevel_VOLUME_MEDIUM
+		settingLevel = 3
 	case "4":
 		level = vectorpb.MasterVolumeLevel_VOLUME_MEDIUM_HIGH
+		settingLevel = 4
 	case "5", "high", "max", "maximum":
 		level = vectorpb.MasterVolumeLevel_VOLUME_HIGH
+		settingLevel = 5
 	default:
 		logger.Println("(volume) could not parse volume parameter: " + param)
 		return nil
@@ -635,8 +696,48 @@ func DoSetVolume(param string, robot *vector.Vector) error {
 	)
 	if err != nil {
 		logger.Println("(volume) error: " + err.Error())
+		return nil
 	}
+	// SetMasterVolume is a temporary overlay like SetEyeColor - the robot
+	// restores its stored master_volume setting when this SDK program
+	// releases behavior control. Persist it the same way the web UI does
+	// (settings master_volume is 1-5, 0 = mute).
+	persistVolumeSetting(robot, settingLevel)
 	return nil
+}
+
+// persistVolumeSetting writes the volume into the robot's own settings
+// (master_volume, 1-5 with 0 = mute), the same way the web UI does, so the
+// volume survives the end of the SDK behavior-control session.
+func persistVolumeSetting(robot *vector.Vector, settingLevel int) {
+	if robot == nil || robot.Cfg.Target == "" || robot.Cfg.Token == "" {
+		return
+	}
+	url := "https://" + robot.Cfg.Target + "/v1/update_settings"
+	updateJSON := []byte(`{"update_settings": true, "settings": {"master_volume": ` + strconv.Itoa(settingLevel) + `} }`)
+	req, err := http.NewRequest("POST", url, bytes.NewBuffer(updateJSON))
+	if err != nil {
+		return
+	}
+	req.Header.Set("Authorization", "Bearer "+robot.Cfg.Token)
+	req.Header.Set("Content-Type", "application/json")
+	client := &http.Client{
+		Timeout: 5 * time.Second,
+		Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: true}, // robot uses a self-signed cert
+		},
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		logger.Println("(volume) could not persist volume setting: " + err.Error())
+		return
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= 300 {
+		logger.Println("(volume) could not persist volume setting, robot returned " + resp.Status)
+		return
+	}
+	logger.Println("(volume) saved master_volume " + strconv.Itoa(settingLevel) + " in robot settings")
 }
 
 func DoMoveHead(param string, robot *vector.Vector) error {
